@@ -209,6 +209,36 @@ export function buildLightAliasTable(inputs: LightChoiceInput[] | LightChoiceBuf
   return { choices: new Uint32Array(buffer), pmfs, totalWeight };
 }
 
+/**
+ * Builds the light table a shadow catcher draws its occlusion tests from: the
+ * environment and the analytic lights of `choices`, with the same relative
+ * weights. Emissive mesh triangles are left out. Light they cast on the
+ * catcher can only brighten it, which a shadow opacity cannot express, and
+ * their power estimate ignores emission textures, so occluded samples on them
+ * darkened the catcher even where they emit nothing. This matches WebGL 2,
+ * whose catcher samples only the environment and the analytic lights.
+ *
+ * Returns `undefined` when `choices` holds no emissive triangle, so the
+ * catcher shares the main table and draws the same samples as before.
+ */
+export function buildShadowCatcherLightAliasTable(
+  choices: LightChoiceBuffer,
+  scratch = new LightChoiceBuffer()
+): LightSamplingDistribution | undefined {
+  let emissive = 0;
+  for (let i = 0; i < choices.count; i++) {
+    if (choices.sourceTypes[i] === LIGHT_CHOICE_EMISSIVE_TRIANGLE) emissive++;
+  }
+  if (!emissive) return undefined;
+  scratch.reserve(choices.count - emissive);
+  for (let i = 0; i < choices.count; i++) {
+    if (choices.sourceTypes[i] !== LIGHT_CHOICE_EMISSIVE_TRIANGLE) {
+      scratch.push(choices.sourceTypes[i], choices.sourceIndices[i], choices.weights[i]);
+    }
+  }
+  return buildLightAliasTable(scratch);
+}
+
 function dominantLocalMaterial(geometry: Geometry, triangleOffset: number, materialCount: number) {
   // Public triangles have the same raw material index on all three corners.
   return localMaterialIndex(geometry, geometry.indices.array[triangleOffset], materialCount);
