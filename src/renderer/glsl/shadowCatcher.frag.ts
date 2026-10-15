@@ -88,7 +88,10 @@ vec4 integrator(inout Ray ray, out vec4 background) {
   if (!path.abort) {
     sampleShadowCatcher(si, 0, path);
   }
-  return vec4(1.0, bg.a, bg.a >= 0.01 ? 1.0 : 0.0, path.alpha);
+  // Alpha is the catcher's visibility here. Its own alpha (opacity, alphaMap)
+  // scales the shadow opacity, never the coverage in red.
+  float visibility = 1.0 - (1.0 - path.alpha) * clamp(mat.alpha, 0.0, 1.0);
+  return vec4(1.0, bg.a, bg.a >= 0.01 ? 1.0 : 0.0, visibility);
 }
 
 void main() {

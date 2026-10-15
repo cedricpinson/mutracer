@@ -90,6 +90,17 @@ function convertMaterial(
   const material = new OpenPBRMaterial();
   if (threeMaterial.userData.mutracerShadowCatcher === true) {
     material.shadowCatcher = true;
+    // Like THREE.ShadowMaterial, the catcher's opacity (and alphaMap) scale
+    // its shadow, e.g. to fade it out toward the edge of a finite ground.
+    const catcher = threeMaterial as THREE.MeshStandardMaterial;
+    material.alphaMap = convertTexture(catcher.alphaMap, textureCache);
+    material.geometryOpacity = Number.isFinite(catcher.opacity) ? catcher.opacity : 1;
+    material.alphaCutoff = Math.max(0, Number.isFinite(catcher.alphaTest) ? catcher.alphaTest : 0);
+    material.alphaMode = material.alphaCutoff > 0
+      ? 'mask'
+      : material.geometryOpacity < 1 || !!material.alphaMap
+        ? 'blend'
+        : 'opaque';
     return material;
   }
   if ((threeMaterial as THREE.MeshBasicMaterial).isMeshBasicMaterial) {

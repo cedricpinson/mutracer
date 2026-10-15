@@ -673,6 +673,7 @@ output.color = color;
     );
     if (resolve) {
       rayTraceOutputPass.setSampleCount(sampleCount);
+      rayTraceOutputPass.setFlatBackground(resolvedFlatBackground);
       rayTraceOutputPass.createPass(encoder, rayTracePass.getOutputBuffer(), resolvedHasShadowCatcher);
     }
 

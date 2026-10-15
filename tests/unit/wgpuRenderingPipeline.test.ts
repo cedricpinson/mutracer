@@ -71,6 +71,7 @@ const mocks = vi.hoisted(() => {
       return this.outputs.get(label)!;
     }
     setSampleCount() {}
+    setFlatBackground() {}
     setSampleTileGrid() {}
   }
   return { Pass, TracePass, OutputPass };

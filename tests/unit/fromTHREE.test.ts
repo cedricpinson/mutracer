@@ -4,7 +4,7 @@ import { getRectLightUOrV, getRectLightArea } from '../../src/renderer/lightsUti
 import { setGeometryBvh, getGeometryBvh } from '../../src/renderer/geometryBvh.js';
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import OpenPBRMaterial from '../../src/scene/OpenPBRMaterial';
+import OpenPBRMaterial, { resolveMaterialAlphaMode } from '../../src/scene/OpenPBRMaterial';
 import SphereLight from '../../src/scene/SphereLight';
 import { fromTHREECamera, fromTHREEScene, THREESync } from '../../src/util/fromTHREE';
 import Camera from '../../src/scene/Camera';
@@ -642,6 +642,22 @@ describe('Three.js scene conversion', () => {
     const converted = fromTHREEScene(scene).meshes[0].materials[0];
 
     expect(converted.shadowCatcher).toBe(true);
+    expect(resolveMaterialAlphaMode(converted)).toBe('opaque');
+  });
+
+  it('keeps a shadow catcher\'s opacity and alpha map, which scale its shadow', () => {
+    const alphaMap = new THREE.DataTexture(new Uint8Array([0, 128, 255, 255]), 1, 1);
+    const material = new THREE.MeshStandardMaterial({ opacity: 0.5, alphaMap });
+    material.userData.mutracerShadowCatcher = true;
+    const scene = new THREE.Scene();
+    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(), material));
+
+    const converted = fromTHREEScene(scene).meshes[0].materials[0];
+
+    expect(converted.shadowCatcher).toBe(true);
+    expect(converted.geometryOpacity).toBe(0.5);
+    expect(converted.alphaMap?.source).toBe(alphaMap);
+    expect(resolveMaterialAlphaMode(converted)).toBe('blend');
   });
 
   it('clamps invalid shader bevel radii during conversion', () => {

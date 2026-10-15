@@ -28,6 +28,11 @@ fn intersectionAlphaPasses(
   }
 
   let ma = materialsBuffer[materialIndex];
+  // A shadow catcher's alpha scales its shadow only; it stays a solid ground
+  // for shadow rays.
+  if (i32(ma.matType) == SHADOW_CATCHER) {
+    return true;
+  }
   var alpha = ma.alpha;
   if (USE_DIFFUSE_MAPS &&
       ma.mapAlphaUsage == ${mapAlphaUsageConstants.alpha}) {

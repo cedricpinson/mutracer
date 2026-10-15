@@ -1086,6 +1086,11 @@ ${getBVHTraverseCode(
     alpha = resolveMaterialAlpha(
       alpha, int(fetchMatData(ii + MAT_ROW_ALPHA).w), alphaCutoff
     );
+    // A shadow catcher's alpha scales its shadow only; it stays a solid
+    // ground for shadow rays.
+    if (int(fetchMatData(ii + MAT_ROW_COLOR).w) == SHADOW_CATCHER) {
+      alpha = 1.0;
+    }
     if (hashedSample(0u) > alpha) {
       // Continue after a transparent hit without traversing beyond the light.
       tMax = min(max(lightDistance, 0.0), RAY_MAX_DISTANCE);
