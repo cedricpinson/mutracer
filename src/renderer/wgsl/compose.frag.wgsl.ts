@@ -169,7 +169,12 @@ if (shadowCatcherEnabled > 0.5) {
     }
     foregroundColor = select(pow(max(foregroundColor, vec3f(0.0)), vec3f(1.0 / 2.2)), linearToSrgb(foregroundColor), hdrOutput);
     backgroundColor = select(pow(max(backgroundColor, vec3f(0.0)), vec3f(1.0 / 2.2)), linearToSrgb(backgroundColor), hdrOutput);
-    if (flatBackgroundColor.a > 0.5) {
+    let flatBackground = flatBackgroundColor.a > 0.5;
+    // Flat-background misses are not in the foreground layer: they show the
+    // same flat colour as the catcher background, over the rest of the pixel.
+    var missAlpha = 0.0;
+    if (flatBackground) {
+      missAlpha = max(1.0 - coverage - foreground.a, 0.0);
       var unbloomedBackground = gradeColor(background.rgb / max(background.a, 0.000001) * exposure);
       unbloomedBackground *= 1.0 - toneMappingParams.y * vignetteEdge;
       if (!hdrOutput) { unbloomedBackground = applyToneMapping(unbloomedBackground); }
@@ -181,10 +186,11 @@ if (shadowCatcherEnabled > 0.5) {
     // alpha layers. Shadow only the catcher background before averaging.
     let shadowAlpha = coverage * opacity;
     let bloomAlpha = clamp(dot(bloomTexel.rgb, vec3f(0.2125, 0.7154, 0.0721)), 0.0, 1.0);
-    let foregroundAlpha = max(foreground.a, bloomAlpha * (1.0 - coverage));
+    let foregroundAlpha = select(max(foreground.a, bloomAlpha * (1.0 - coverage)), foreground.a, flatBackground);
     let backgroundAlpha = max(background.a, bloomAlpha * coverage);
-    let alpha = foregroundAlpha + backgroundAlpha * (1.0 - opacity) + shadowAlpha;
+    let alpha = foregroundAlpha + missAlpha + backgroundAlpha * (1.0 - opacity) + shadowAlpha;
     let premultiplied = foregroundColor * foregroundAlpha
+      + backgroundColor * missAlpha
       + backgroundColor * backgroundAlpha * (1.0 - opacity)
       + shadowCatcherColor * shadowAlpha;
     finalColor = vec4f(premultiplied / max(alpha, 0.000001), alpha);

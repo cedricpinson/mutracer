@@ -81,3 +81,28 @@ it('matches the auxiliary accumulation layout in tracing, normalization and the 
     vi.unstubAllGlobals();
   }
 });
+
+it('hands the catcher layers the flat background colour, and only them', () => {
+  vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 });
+  vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 });
+  try {
+    // The layers pass binds its uniform buffers in creation order: binding 2 is the third one.
+    expect(makeShaderDataDefinitions(createNormalizeRayTraceOutputWGSL(true)).uniforms.flatBackground)
+      .toMatchObject({ group: 1, binding: 2 });
+    expect(makeShaderDataDefinitions(createNormalizeRayTraceOutputWGSL()).uniforms.flatBackground).toBeUndefined();
+
+    const buffers: object[] = [];
+    const writeBuffer = vi.fn();
+    const device = {
+      createBuffer: vi.fn(() => { const buffer = {}; buffers.push(buffer); return buffer; }),
+      queue: { writeBuffer }
+    } as unknown as GPUDevice;
+    new WGPURayTraceOutputPass(device).setFlatBackground([0.1, 0.2, 0.3, 1]);
+
+    expect(writeBuffer).toHaveBeenCalledOnce();
+    expect(writeBuffer.mock.calls[0][0]).toBe(buffers[2]);
+    expect(Array.from(writeBuffer.mock.calls[0][2] as Float32Array)).toEqual([0.1, 0.2, 0.3, 1].map(Math.fround));
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
