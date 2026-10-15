@@ -2,10 +2,13 @@ import { getSphereLightArea, getSpotLightArea, getSpotLightRadiance } from '../.
 import { describe, expect, it } from 'vitest';
 import {
   buildLightAliasTable,
+  buildShadowCatcherLightAliasTable,
   collectEmissiveTriangles,
   estimateAnalyticLightPower,
-  
+  LightChoiceBuffer,
   LIGHT_CHOICE_ANALYTIC,
+  LIGHT_CHOICE_EMISSIVE_TRIANGLE,
+  LIGHT_CHOICE_ENVIRONMENT,
   packEmissiveTriangles
 } from '../../src/renderer/lightSampling';
 import RectLight from '../../src/scene/RectLight';
@@ -15,6 +18,7 @@ import Mesh from '../../src/scene/Mesh';
 import OpenPBRMaterial from '../../src/scene/OpenPBRMaterial';
 import { Attribute } from '../../src/scene/Geometry';
 import { createPlaneGeometry } from '../../src/util/commonGeometry';
+import Texture from '../../src/scene/Texture';
 import createRayTraceGlsl from '../../src/renderer/glsl/rayTrace.frag';
 import sampleLight from '../../src/renderer/wgsl/chunks/sampleLight.wgsl';
 
@@ -107,5 +111,59 @@ describe('power-weighted light sampling', () => {
       [{ mesh, geometry: mesh.geometry, materialIndices: [0] }],
       [material]
     )).toHaveLength(0);
+  });
+});
+
+describe('shadow-catcher light table', () => {
+  // Same weights as WGPURayTracePass._updateLightSamplingData.
+  function sceneChoices(emissiveMap?: Texture) {
+    const material = new OpenPBRMaterial();
+    material.emissionColor = [1, 1, 1];
+    material.emissionLuminance = 10;
+    material.emissiveMap = emissiveMap;
+    const mesh = new Mesh(createPlaneGeometry(), material);
+    const triangles = collectEmissiveTriangles(
+      [{ mesh, geometry: mesh.geometry, materialIndices: [0] }],
+      [material]
+    );
+    const choices = new LightChoiceBuffer();
+    choices.reserve(2 + triangles.length);
+    choices.push(LIGHT_CHOICE_ENVIRONMENT, 0, 1);
+    choices.push(LIGHT_CHOICE_ANALYTIC, 0, 3);
+    triangles.forEach((triangle, i) => choices.push(LIGHT_CHOICE_EMISSIVE_TRIANGLE, i, triangle.area * triangle.samplingLuminance));
+    return choices;
+  }
+
+  it('leaves out emissive triangles, even those a black emission texture turns off', () => {
+    // Mesh-light power ignores the emission texture, so a black-textured
+    // emitter still dominates the main table.
+    const choices = sceneChoices(new Texture({data: new Uint8Array(16), width: 2, height: 2}));
+    const main = buildLightAliasTable(choices);
+    expect(main.pmfs[2] + main.pmfs[3]).toBeGreaterThan(0.8);
+
+    const catcher = buildShadowCatcherLightAliasTable(choices)!;
+    expect(catcher.pmfs.length).toBe(2);
+    expect(catcher.pmfs[0]).toBeCloseTo(0.25);
+    expect(catcher.pmfs[1]).toBeCloseTo(0.75);
+    // Each entry keeps its main-table source so sampleLightChoiceTable reads the same light.
+    const entries = new Int32Array(catcher.choices.buffer);
+    expect([entries[2], entries[3], entries[6], entries[7]]).toEqual([
+      LIGHT_CHOICE_ENVIRONMENT, 0, LIGHT_CHOICE_ANALYTIC, 0
+    ]);
+  });
+
+  it('shares the main table when the scene has no emissive mesh', () => {
+    const choices = new LightChoiceBuffer();
+    choices.reserve(2);
+    choices.push(LIGHT_CHOICE_ENVIRONMENT, 0, 1);
+    choices.push(LIGHT_CHOICE_ANALYTIC, 0, 3);
+    expect(buildShadowCatcherLightAliasTable(choices)).toBeUndefined();
+  });
+
+  it('is empty when only emissive meshes light the scene', () => {
+    const choices = new LightChoiceBuffer();
+    choices.reserve(1);
+    choices.push(LIGHT_CHOICE_EMISSIVE_TRIANGLE, 0, 5);
+    expect(buildShadowCatcherLightAliasTable(choices)!.pmfs.length).toBe(0);
   });
 });
