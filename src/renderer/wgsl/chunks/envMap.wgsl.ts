@@ -38,6 +38,11 @@ fn cartesianToEquirect(pointOnSphere: vec3f) -> vec2f {
   return vec2f(phi * 0.5 * INVPI, theta * INVPI);
 }
 
+// World direction to environment map UV. d * M is transpose(M) * d: world to map.
+fn envMapUv(worldDirection: vec3f) -> vec2f {
+  return cartesianToEquirect(worldDirection * rtUniform.envRotation);
+}
+
 fn getEnvmapV(u: f32, vOffset: ptr<function, i32>, pdf: ptr<function, vec2f>) -> f32 {
   let size = vec2i(textureDimensions(envMap, 0));
 
@@ -107,9 +112,10 @@ fn sampleEnvmap(random: vec2f, uv: ptr<function, vec2f>, pdf: ptr<function, f32>
 
   let dir = vec3f(-sinTheta * cosPhi, cosTheta, -sinTheta * sinPhi);
 
+  // Rotations preserve solid angle, so the pdf is unchanged.
   *pdf = partialPdf.x * partialPdf.y * INVPI2 / (2.0 * sinTheta);
 
-  return dir;
+  return rtUniform.envRotation * dir;
 }
 
 fn envMapPdf(_uv: vec2f) -> f32 {

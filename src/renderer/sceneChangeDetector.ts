@@ -168,6 +168,7 @@ export class SceneChangeDetector {
     }
     const lights = scene.lights.map(snapshotFields);
     const background = backgroundSnapshot(scene.background);
+    background.push(...(scene.backgroundRotation ? Array.from(scene.backgroundRotation) : [undefined]));
     const changes: SceneChanges = {
       meshes: full ? 'full' : transforms.length || colors.length || materials.length || geometries.size ? 'incremental' : 'none',
       transforms, colors, materials, geometries: [...geometries],

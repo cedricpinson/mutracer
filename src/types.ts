@@ -2,6 +2,8 @@
 export type Vec2 = [number, number] | Float32Array;
 /** Three-component vector, as a tuple or float32 storage. */
 export type Vec3 = [number, number, number] | Float32Array;
+/** Column-major 3×3 matrix (9 elements). */
+export type Mat3 = Float32Array | number[];
 /** Column-major 4×4 matrix (16 elements). */
 export type Mat4 = Float32Array | number[];
 

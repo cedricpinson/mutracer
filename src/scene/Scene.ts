@@ -1,4 +1,4 @@
-import { ColorRGBA } from '../types.js';
+import { ColorRGBA, Mat3 } from '../types.js';
 import AmbientLight from './AmbientLight.js';
 import DirectionalLight from './DirectionalLight.js';
 import EnvironmentLight from './EnvironmentLight.js';
@@ -55,5 +55,10 @@ export interface Scene {
   lights: SceneLight[];
   /** Camera-ray background; defaults to the environment light when omitted. */
   background?: SceneBackground;
-
+  /**
+   * Orientation of an equirectangular or grounded-skybox background: column-major 3×3
+   * map-to-world rotation. Default identity. An omitted background follows
+   * `EnvironmentLight.rotation` instead.
+   */
+  backgroundRotation?: Mat3;
 }
