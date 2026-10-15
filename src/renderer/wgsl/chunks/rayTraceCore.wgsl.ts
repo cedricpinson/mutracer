@@ -264,6 +264,9 @@ struct RayTraceUniform {
   sequenceSeed: u32,
   zSobolLogSPP: u32,
   sampleSequenceOffset: u32,
+  // Shadow-catcher light table, relative to lightChoiceTexelOffset.
+  shadowCatcherChoiceOffset: i32,
+  shadowCatcherChoiceCount: i32,
   environmentRotation: mat4x4f,
   backgroundMapTransform: vec4f,
 }

@@ -76,6 +76,7 @@ import {
 } from './RenderingPipeline.js';
 import {
   buildLightAliasTable,
+  buildShadowCatcherLightAliasTable,
   EmissiveTriangleCache,
   LightChoiceBuffer,
   EmissiveTriangle,
@@ -202,6 +203,9 @@ export function makeRayTraceUniform() {
     sequenceSeed: new Uint32Array(RayTraceUniformValues, 156, 1),
     zSobolLogSPP: new Uint32Array(RayTraceUniformValues, 160, 1),
     sampleSequenceOffset: new Uint32Array(RayTraceUniformValues, 164, 1),
+    // Shadow-catcher light table, relative to lightChoiceTexelOffset.
+    shadowCatcherChoiceOffset: new Int32Array(RayTraceUniformValues, 168, 1),
+    shadowCatcherChoiceCount: new Int32Array(RayTraceUniformValues, 172, 1),
     environmentRotation: new Float32Array(RayTraceUniformValues, 176, 16),
     backgroundMapTransform: new Float32Array(RayTraceUniformValues, 240, 4)
   };
@@ -407,6 +411,7 @@ class WGPURayTracePass {
   private _instancesBuffer?: GPUBuffer;
   private _emissiveCache = new EmissiveTriangleCache();
   private _lightChoices = new LightChoiceBuffer();
+  private _shadowCatcherLightChoices = new LightChoiceBuffer();
   private _lightSamplingData?: Float32Array;
   private _lightSamplingScratch?: Float32Array;
   private _lightSamplingTriangleCount = -1;
@@ -2084,6 +2089,7 @@ ${rayTraceCompute({
     this._analyticLights.forEach((light, i) => choices.push(LIGHT_CHOICE_ANALYTIC, i, estimateAnalyticLightPower(light)));
     this._emissiveTriangles.forEach((triangle, i) => choices.push(LIGHT_CHOICE_EMISSIVE_TRIANGLE, i, triangle.area * triangle.samplingLuminance));
     const distribution = buildLightAliasTable(choices);
+    const shadowCatcherDistribution = buildShadowCatcherLightAliasTable(choices, this._shadowCatcherLightChoices);
     const domainDiagnostics = {
       environment: { count: 0, weight: 0, pmf: 0 },
       infinite: { count: 0, weight: 0, pmf: 0 },
@@ -2109,9 +2115,13 @@ ${rayTraceCompute({
     this._lightDomainDiagnostics = domainDiagnostics;
     this._rtUniform.views.lightChoiceCount[0] = choices.count;
     this._rtUniform.views.lightWeightTotal[0] = distribution.totalWeight;
+    // Without emissive triangles the catcher shares the main table.
+    const shadowCatcherChoiceCount = shadowCatcherDistribution ? shadowCatcherDistribution.pmfs.length : choices.count;
+    this._rtUniform.views.shadowCatcherChoiceOffset[0] = shadowCatcherDistribution ? choices.count : 0;
+    this._rtUniform.views.shadowCatcherChoiceCount[0] = shadowCatcherChoiceCount;
 
     const emissiveTexels = this._emissiveTriangles.length * 6;
-    const choiceTexels = Math.max(choices.count, 1);
+    const choiceTexels = Math.max(choices.count + (shadowCatcherDistribution ? shadowCatcherChoiceCount : 0), 1);
     const profileStartTexel = emissiveTexels + choiceTexels;
     const packedIES = packIESProfiles(this._analyticLights, profileStartTexel);
     this._iesProfileTexelOffsets = packedIES.offsets;
@@ -2151,6 +2161,12 @@ ${rayTraceCompute({
       distribution.choices,
       emissiveTexels * 4
     );
+    if (shadowCatcherDistribution && shadowCatcherChoiceCount) {
+      new Uint32Array(textureData.buffer).set(
+        shadowCatcherDistribution.choices,
+        (emissiveTexels + choices.count) * 4
+      );
+    }
     textureData.set(packedIES.data, profileStartTexel * 4);
     const previous = this._lightSamplingData;
     const full = resized || !previous || this._lightSamplingTriangleCount !== this._emissiveTriangles.length;
