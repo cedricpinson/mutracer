@@ -516,12 +516,21 @@ export class ViewerEngine {
     if (get().settings.envId !== id) useViewer.setState((s) => ({ settings: { ...s.settings, envId: id } }));
   }
 
+  /** Turns the HDRI and the background shown from it together; the studio ambient stays fixed. */
+  private applyEnvironmentRotation() {
+    const { envRotation, lighting } = this.settings;
+    const y = lighting === 'studio' ? 0 : THREE.MathUtils.degToRad(envRotation);
+    this.scene.environmentRotation.set(0, y, 0);
+    this.scene.backgroundRotation.set(0, y, 0);
+  }
+
   /** Also selects the lighting: studio mode swaps the HDRI for a dim ambient fill. */
   private applyBackground() {
     const { background, backgroundColor, groundedHeight, groundedRadius, lighting } = this.settings;
     const studio = lighting === 'studio';
     const environment = studio ? this.studioAmbient.texture : this.environment.texture;
     this.scene.environment = environment;
+    this.applyEnvironmentRotation();
     this.studioRig.visible = studio;
     this.scene.userData.mutracerHiddenBackground = background === 'transparent';
     // Projects the environment onto a ground disc and dome around the model.
@@ -577,12 +586,13 @@ export class ViewerEngine {
     this.controls.enabled = s.cameraIndex < 0;
 
     if ((changed('envId') || changed('envResolution')) && s.envId !== 'custom') void this.applyEnvironmentPreset(s.envId);
-    if (changed('envIntensity') || changed('envRotation')) this.environment.set(s.envIntensity, s.envRotation);
+    if (changed('envIntensity')) this.environment.set(s.envIntensity);
+    if (changed('envRotation')) this.applyEnvironmentRotation();
     if (changed('studioPreset') || changed('studioIntensity') || changed('studioRotation') || changed('studioSize')) this.applyStudioRig();
     if (changed('studioAmbient') || changed('studioAmbientColor')) {
       // THREE.Color converts the sRGB hex to linear RGB.
       const tint = new THREE.Color(s.studioAmbientColor);
-      this.studioAmbient.set(s.studioAmbient, 0, [tint.r, tint.g, tint.b]);
+      this.studioAmbient.set(s.studioAmbient, [tint.r, tint.g, tint.b]);
     }
     if (changed('lighting') || changed('background') || changed('backgroundColor') || changed('groundedHeight') ||
       changed('groundedRadius')) this.applyBackground();
