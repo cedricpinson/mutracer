@@ -161,7 +161,7 @@ Renderer-specific settings without a Three.js equivalent:
 
 | Key | On | Description |
 | --- | --- | --- |
-| `mutracerShadowCatcher: true` | material | Shadow-catcher ground |
+| `mutracerShadowCatcher: true` | material | Shadow-catcher ground; its `opacity` and `alphaMap` scale the shadow |
 | `mutracerOpenPBR: { ... }` | material | OpenPBR inputs without a Three.js equivalent: `baseWeight`, `baseDiffuseRoughness`, `specularWeight`, `specularColor`, `coat*`, `fuzz*`, `thinFilm*`, `thinWalled`, `subsurface*`, `transmissionScatter*`, `transmissionDispersion*` |
 | `mutracerBevelSize` | material | Shader bevel radius |
 | `mutracerUvProjection`, `mutracerUvProjectionScale`, `mutracerUvReferenceLength` | material | Procedural UV projection |
