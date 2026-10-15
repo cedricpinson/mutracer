@@ -8,6 +8,7 @@ import Mesh from '../scene/Mesh.js';
 import Geometry from '../scene/Geometry.js';
 import OpenPBRMaterial from '../scene/OpenPBRMaterial.js';
 import { SceneBackground, SceneLight } from '../scene/Scene.js';
+import type { Mat3 } from '../types.js';
 import { ColorRGB } from '../types.js';
 import { TextureAtlasStats } from './MaterialTable.js';
 import type {
@@ -198,7 +199,8 @@ export interface SceneResources {
   /** Changes the software memory guard used when packing material textures. */
   setTextureAtlasBudget(maxBytes: number): boolean;
   setLights(lights: SceneLight[]): void;
-  setBackground(background?: SceneBackground): void;
+  /** `rotation` orients a map background (column-major 3×3); omitted means identity. */
+  setBackground(background?: SceneBackground, rotation?: Mat3): void;
   getDiagnostics(): RenderingDiagnostics;
   dispose(): void;
   readDepthSamples(area: DepthSampleArea): Promise<Float32Array | undefined>;

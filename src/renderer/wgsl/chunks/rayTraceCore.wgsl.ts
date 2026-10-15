@@ -263,6 +263,9 @@ struct RayTraceUniform {
   sequenceSeed: u32,
   zSobolLogSPP: u32,
   sampleSequenceOffset: u32,
+  // Map-to-world rotations of the environment and of a map background.
+  envRotation: mat3x3f,
+  backgroundRotation: mat3x3f,
 }
 
 // Buffers
