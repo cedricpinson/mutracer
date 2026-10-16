@@ -1474,6 +1474,7 @@ label: 'Render complete image', size: { width, height }, format: displayTexture.
     canCompleteSampleWithin(timeBudgetMs: number) {
       return (lastGpuTraceTiming?.estimatedFullFrameTimeMs ?? elapsedFrameTime) <= timeBudgetMs;
     },
+    gpuSampleTimeMs() { return lastGpuTraceTiming?.estimatedFullFrameTimeMs; },
     get presentationComplete() { return !!presentationTexture; },
     get presentationDenoised() { return presentationDenoised; },
     present() {

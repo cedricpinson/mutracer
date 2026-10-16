@@ -25,6 +25,7 @@ export const traceSchema = {
 } satisfies {[K in keyof TraceSettings]: Descriptor<K>};
 export const renderSchema = [
   ...Object.values(traceSchema),
+  {key: 'targetBatchTimeMs', default: 0, kind: 'execution', backends: ['webgpu']},
   {key: 'resolutionScale', default: 1, kind: 'resolution', backends: both},
   {key: 'adaptiveResolution', default: false, kind: 'resolution', backends: both},
   {key: 'fallback', default: null, kind: 'fallback', backends: both},

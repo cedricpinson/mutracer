@@ -123,6 +123,44 @@ describe('independent Render', () => {
     render.timeBudgetMs = 50; render.maxTiles = 1; render.allowMultipleSamplesPerFrame = true; render.refine();
     expect(render.samples).toBe(2); engine.dispose();
   });
+  it('tops the GPU queue up to targetBatchTimeMs with batches once a sample fits in half of it', async () => {
+    let now = 0; vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const {engine, targets, camera} = renderFixture(); const render = new Render(engine, {targetBatchTimeMs: 40});
+    const batches = () => vi.mocked(targets[0].setOfflineRenderOptions).mock.calls.map(([options]) => options.samplesPerBatch);
+    render.refine(); expect(render.samples).toBe(1); expect(batches()).toEqual([]);
+    // Unmeasured: half the budget per sample, so two samples fill it.
+    render.refine(); expect(render.samples).toBe(3); expect(batches()).toEqual([2]);
+    // The queue holds a whole budget: nothing more until it drains.
+    render.refine(); expect(render.samples).toBe(3);
+    now = 10; await new Promise(resolve => setTimeout(resolve, 0));
+    // Measured 5 ms per sample, smoothed to 12.5 ms: three samples fit.
+    render.refine(); expect(render.samples).toBe(6); expect(batches()).toEqual([2, 3]);
+    expect(targets[0].restartSamples).toHaveBeenCalledTimes(1);
+    // A new accumulation keeps batching, from its first sample on.
+    now = 20; await new Promise(resolve => setTimeout(resolve, 0));
+    camera.position = [1, 0, 0]; engine.update(); render.refine();
+    expect(targets[0].restartSamples).toHaveBeenCalledTimes(2); expect(render.samples).toBeGreaterThan(1);
+    engine.dispose();
+  });
+  it('stops batching once a sample exceeds three quarters of the budget, and resumes under half', () => {
+    const {engine, targets} = renderFixture(); const render = new Render(engine, {targetBatchTimeMs: 40});
+    render.refine();
+    let sampleTime = 10; Object.assign(targets[0], {gpuSampleTimeMs: () => sampleTime});
+    const lastBatch = () => vi.mocked(targets[0].setOfflineRenderOptions).mock.lastCall?.[0].samplesPerBatch;
+    render.refine(); expect(render.samples).toBe(5); expect(lastBatch()).toBe(4);
+    sampleTime = 25; render.refine(); expect(render.samples).toBe(5);
+    sampleTime = 35; render.refine(); expect(render.samples).toBe(6); expect(lastBatch()).toBe(0);
+    sampleTime = 25; render.refine(); expect(render.samples).toBe(7); expect(lastBatch()).toBe(0);
+    sampleTime = 10; render.refine(); expect(render.samples).toBe(11); expect(lastBatch()).toBe(4);
+    engine.dispose();
+  });
+  it.each([
+    ['webgl', {backend: 'webgl' as const}], ['a sample over half the budget', {fits: false}],
+  ])('keeps one sample per refine on %s', (_case, options) => {
+    const {engine, targets} = renderFixture(options); const render = new Render(engine, {targetBatchTimeMs: 40});
+    for (let i = 0; i < 4; i++) render.refine();
+    expect(render.samples).toBe(4); expect(targets[0].setOfflineRenderOptions).not.toHaveBeenCalled(); engine.dispose();
+  });
   it('uses independent restarts and terminal sample counts', () => {
     const {engine} = renderFixture(); const a = new Render(engine, {maxSamples: 2}), b = new Render(engine);
     expect(a.refine()).toBe('converging'); expect(a.refine()).toBe('finished'); expect(a.converged).toBe(true);

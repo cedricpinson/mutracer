@@ -116,6 +116,7 @@ other sequences retain their completed samples.
 | `adaptiveResolution` | `false` | `{targetFrameMs, minScale}` for scale-based renders; both required, positive, minScale ≤ resolutionScale |
 | `timeBudgetMs` / `maxTiles` | `21` / `Infinity` | Tile time budget / tiles per call |
 | `allowMultipleSamplesPerFrame` | `false` | Add multiple samples when time permits |
+| `targetBatchTimeMs` | `0` | WebGPU progressive batch budget in ms: once a sample fits in half of it, each refine tops the GPU queue up to this much of this render's work, in batches of samples; 0 keeps one sample or tile per refine. Ignored on WebGL |
 | `fallback` | `null` | Single-level Render on the same engine |
 | `denoiser` | `null` | Per-render configuration; read back through the frozen `denoiser` getter and change with `setDenoiser()`; see [denoising](./denoising.md) |
 
