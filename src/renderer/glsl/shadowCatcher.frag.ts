@@ -87,7 +87,9 @@ vec4 integrator(inout Ray ray, out vec4 background) {
   background = vec4(bg.rgb * bg.a, bg.a);
   // Alpha is the catcher's visibility here. Its own alpha (opacity, alphaMap)
   // scales the shadow opacity, never the coverage in red. Where that alpha is
-  // zero the catcher is fully visible whatever the shadow rays find: skip them.
+  // zero the catcher is fully visible whatever the shadow rays find: skip them
+  // (bit-exact). Same optimisation and measurements as the WebGPU integrator's
+  // SHADOW_CATCHER branch (rayTrace.compute.ts).
   float catcherAlpha = clamp(mat.alpha, 0.0, 1.0);
   if (!path.abort && catcherAlpha > 0.0) {
     sampleShadowCatcher(si, 0, path);

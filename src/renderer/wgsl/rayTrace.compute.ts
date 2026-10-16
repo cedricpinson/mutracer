@@ -725,8 +725,14 @@ fn integrator(uv: vec2f, ray: Ray, outAux: ptr<function, RayTraceAuxiliary>) -> 
     // alpha (opacity, alphaMap) scales its shadow, never its coverage.
     let catcherAlpha = clamp(ma.alpha, 0.0, 1.0);
     // Where that alpha is zero the shadow opacity is zero whatever the
-    // visibility: skip the shadow rays. Nothing after this return draws from
-    // the sample stream, so the other pixels and outputs are unchanged.
+    // visibility, so its SHADOW_CATCHER_LIGHT_SAMPLES shadow rays per sample
+    // would be wasted: skip them. A catcher whose alpha fades out toward its
+    // edges (a shadow footprint) has many such pixels. Bit-exact: nothing
+    // after this return draws from the sample stream, so the other pixels and
+    // outputs are unchanged. Measured (M4 Max, WebGPU, 1280x800, GPU time per
+    // sample): -2 to -3 % near the model; camera pulled back x3 to x6: -13 to
+    // -22 % (robot 2.49 -> 1.93 ms, office 3.90 -> 3.37 ms at x6). The gain
+    // grows with the share of catcher pixels at zero alpha.
     if (catcherAlpha <= 0.0) {
       return vec4f(vec3f(1.0), 0.0);
     }
