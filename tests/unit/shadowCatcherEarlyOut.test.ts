@@ -1,3 +1,7 @@
+// Locks the shadow-catcher early out: shadow rays are skipped where the
+// catcher's resolved alpha is zero. Why it exists and what it saves are
+// documented once, above the gate in the integrator's SHADOW_CATCHER branch
+// (src/renderer/wgsl/rayTrace.compute.ts).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import rayTraceCompute from '../../src/renderer/wgsl/rayTrace.compute';
 import shadowCatcherFrag from '../../src/renderer/glsl/shadowCatcher.frag';
