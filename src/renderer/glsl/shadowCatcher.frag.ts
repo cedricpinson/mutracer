@@ -85,12 +85,14 @@ vec4 integrator(inout Ray ray, out vec4 background) {
 
   vec4 bg = sampleBackgroundFromRay(ray.o, ray.d);
   background = vec4(bg.rgb * bg.a, bg.a);
-  if (!path.abort) {
+  // Alpha is the catcher's visibility here. Its own alpha (opacity, alphaMap)
+  // scales the shadow opacity, never the coverage in red. Where that alpha is
+  // zero the catcher is fully visible whatever the shadow rays find: skip them.
+  float catcherAlpha = clamp(mat.alpha, 0.0, 1.0);
+  if (!path.abort && catcherAlpha > 0.0) {
     sampleShadowCatcher(si, 0, path);
   }
-  // Alpha is the catcher's visibility here. Its own alpha (opacity, alphaMap)
-  // scales the shadow opacity, never the coverage in red.
-  float visibility = 1.0 - (1.0 - path.alpha) * clamp(mat.alpha, 0.0, 1.0);
+  float visibility = 1.0 - (1.0 - path.alpha) * catcherAlpha;
   return vec4(1.0, bg.a, bg.a >= 0.01 ? 1.0 : 0.0, visibility);
 }
 

@@ -719,15 +719,22 @@ fn integrator(uv: vec2f, ray: Ray, outAux: ptr<function, RayTraceAuxiliary>) -> 
     // neutral reflectance and its shading normal, independent of visibility.
     (*outAux).albedo = vec3f(1.0);
     (*outAux).normal = select(si.normal, -si.normal, dot(si.normal, ray.d) > 0.0);
-    var path: Path;
-    path.ray = ray;
-    path.fromEye = true;
-    sampleShadowCatcher(si, 0, &path);
     // RGB stores primary catcher coverage independently from the stochastic
     // visibility in alpha. Composition uses this raw coverage to clip any
     // shadow-mask denoising bleed at model silhouettes. The catcher's own
     // alpha (opacity, alphaMap) scales its shadow, never its coverage.
-    return vec4f(vec3f(1.0), path.alpha * clamp(ma.alpha, 0.0, 1.0));
+    let catcherAlpha = clamp(ma.alpha, 0.0, 1.0);
+    // Where that alpha is zero the shadow opacity is zero whatever the
+    // visibility: skip the shadow rays. Nothing after this return draws from
+    // the sample stream, so the other pixels and outputs are unchanged.
+    if (catcherAlpha <= 0.0) {
+      return vec4f(vec3f(1.0), 0.0);
+    }
+    var path: Path;
+    path.ray = ray;
+    path.fromEye = true;
+    sampleShadowCatcher(si, 0, &path);
+    return vec4f(vec3f(1.0), path.alpha * catcherAlpha);
   }
   else {
     if (HAS_BEVEL && rtUniform.bevel != 0) {
