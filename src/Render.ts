@@ -13,6 +13,15 @@ import type { OfflineAdaptiveSamplingOptions, OfflineVarianceHistory } from './r
 import { nextPreviewScale } from './renderer/util.js';
 import {scheduleFrame} from './util/frame.js';
 
+/** Upper bound of a progressive batch ({@link Render.targetBatchTimeMs}), in samples. */
+const MAX_PROGRESSIVE_BATCH = 64;
+/**
+ * A target in progressive batch mode: the batch size last applied to it, the measured GPU time per
+ * sample, when the work already submitted is expected to complete, the last completion seen and
+ * the batches not completed yet.
+ */
+interface ProgressiveBatch { target: RenderTarget; applied: number; msPerSample: number; queueEnd: number; lastDone: number; inFlight: number; }
+
 /** Complete-sample notification, including the backend's measured sample time. */
 export interface SampleEvent { samples: number; isFirstFrame: boolean; frameTimeMs: number; }
 /** State of one independent accumulation. Default preparing. */
@@ -97,6 +106,14 @@ export interface RenderSettings {
   /** Tile execution budget in milliseconds. Default 21. */ timeBudgetMs?: number;
   /** Maximum tiles per frame. Default Infinity. */ maxTiles?: number;
   /** Accumulate multiple samples when frame time permits. Default false. */ allowMultipleSamplesPerFrame?: boolean;
+  /**
+   * Progressive batch budget in milliseconds, WebGPU only (ignored on WebGL). Once a complete
+   * sample is measured to fit in half of it, each refine tops the GPU queue up to this much of this
+   * render's work, in batches of samples, so the GPU stays busy between display frames, until a
+   * sample exceeds three quarters of it; slower samples keep their tiles. It also bounds how long a newly selected render (an interactive
+   * preview) waits behind this one's queued work. Samples keep their sequence index. 0 keeps one
+   * sample or tile per refine. Changes keep accumulated samples. Default 0.
+   */ targetBatchTimeMs?: number;
   /** Adapt scale to frame timing; minScale must not exceed resolutionScale. Default false. */ adaptiveResolution?: {targetFrameMs: number; minScale: number} | false;
   /** Single-level fallback on the same engine. Default null. */ fallback?: Render | null;
   /** Denoising configuration. Default null. */ denoiser?: DenoiserOptions | null;
@@ -212,6 +229,7 @@ export default class Render {
   /** Execution budget in milliseconds. Default 21. */ timeBudgetMs = 21;
   /** Maximum tiles per frame. Default Infinity. */ maxTiles = Infinity;
   /** Allow several samples per frame when possible. Default false. */ allowMultipleSamplesPerFrame = false;
+  /** WebGPU progressive batch budget in milliseconds; 0 disables batching. Default 0. */ targetBatchTimeMs = 0;
   /** Adaptive resolution controller, or false. Default false. */ adaptiveResolution: {targetFrameMs: number; minScale: number} | false = false;
   private _resolutionScale = 1;
   /** Canvas-relative scale. Default 1; cannot be assigned on a fixed-size render. */
@@ -270,6 +288,8 @@ export default class Render {
   private _adaptiveFrames = new Set<() => void>();
   private _adaptiveFastFrames = 0;
   private _events = new Events<{sample: SampleEvent}>();
+  /** Progressive batching ({@link Render.targetBatchTimeMs}) on its target, while active. */
+  private _batch?: ProgressiveBatch;
   /** Owning engine. */ get engine(): Engine { return this._engine; }
   /** Whether inference is queued or running, including intermediate updates. Default false. */ get denoising(): boolean { return !!this._denoisePending; }
   /** Subscribes to every complete sample on this render; returns unsubscribe. */
@@ -361,6 +381,67 @@ export default class Render {
     if (compiling) this._sampleStart = undefined;
     return compiling;
   }
+  /**
+   * One progressive submission: a sample or tile, or — once a sample is known to fit in half of
+   * `targetBatchTimeMs` — a batch that tops the GPU queue up to that budget. The work queued ahead
+   * is estimated from the measured GPU time per sample (completion to completion, smoothed), so
+   * the GPU stays busy between display frames while never holding more than about one budget of
+   * this render's work. Samples keep their sequence index: a batched image is the same as an
+   * unbatched one at equal sample counts.
+   */
+  private _traceProgressive(target: RenderTarget, limit: number) {
+    const budget = this.targetBatchTimeMs, device = this._engine.device;
+    let batch = this._batch?.target === target ? this._batch : undefined;
+    // Batch once a sample fits in half the budget, and stop when it no longer fits in three
+    // quarters of it: GPU timestamps when available, else this render's own measurement (the
+    // backend's frame time covers a whole batch while batching).
+    const timed = target.gpuSampleTimeMs?.();
+    const fits = budget > 0 && !!device && this._engine.backend === 'webgpu' && (batch
+      ? (timed ?? batch.msPerSample) <= budget * .75
+      : timed !== undefined ? timed <= budget / 2 : target.canCompleteSampleWithin(budget / 2));
+    if (!fits || !device) {
+      if (batch) this._stopBatching(target);
+      return this._trace(target, limit);
+    }
+    if (!batch) {
+      if (this.samples < 1) return this._trace(target, limit);
+      batch = this._batch = {target, applied: 0, msPerSample: timed ?? budget / 2, queueEnd: 0, lastDone: 0, inFlight: 0};
+    }
+    const submitted = performance.now();
+    const size = Math.min(MAX_PROGRESSIVE_BATCH, limit - this.samples, Math.floor((budget - Math.max(0, batch.queueEnd - submitted)) / batch.msPerSample));
+    if (size < 1) return false;
+    if (batch.applied !== size) {
+      target.setOfflineRenderOptions({samplesPerBatch: size, deferPostProcess: false, sampleSequenceOffset: 0});
+      batch.applied = size;
+    }
+    const before = this.samples;
+    if (this._trace(target, limit)) return true;
+    const rendered = this.samples - before;
+    if (rendered > 0) {
+      const current = batch; current.inFlight++;
+      current.queueEnd = Math.max(submitted, current.queueEnd) + rendered * current.msPerSample;
+      const settle = () => {
+        if (this._batch !== current) return;
+        const done = performance.now();
+        // Wall time of this batch: from its submission, or from the previous batch's completion
+        // when it was queued behind it. Completions can resolve together, and other work shares
+        // the queue, so it is kept within [1, 2] × the GPU-timestamped sample time when known.
+        let perSample = (done - Math.max(submitted, current.lastDone)) / rendered;
+        const sampleTime = target.gpuSampleTimeMs?.();
+        if (sampleTime) perSample = Math.min(2 * sampleTime, Math.max(sampleTime, perSample));
+        current.lastDone = done;
+        if (--current.inFlight === 0) current.queueEnd = done;
+        current.msPerSample = (current.msPerSample + perSample) / 2;
+      };
+      device.queue.onSubmittedWorkDone().then(settle, () => { if (this._batch === current && --current.inFlight === 0) current.queueEnd = 0; });
+    }
+    return false;
+  }
+  /** Back to one sample or tile per refine on `target` (active). */
+  private _stopBatching(target?: RenderTarget) {
+    if (target && this._batch?.target === target) target.setOfflineRenderOptions({samplesPerBatch: 0, deferPostProcess: false, sampleSequenceOffset: 0});
+    this._batch = undefined;
+  }
   private _adaptResolution() {
     if (!this._busy && this.adaptiveResolution && this._frameTime > 0 && this.samples > 0) {
       const {targetFrameMs, minScale} = this.adaptiveResolution;
@@ -417,7 +498,7 @@ export default class Render {
     target.setPreserveDenoisedOutput?.(!!this._filter && this._schedule() !== 'converged');
     const limit = this._nextSampleTarget();
     if (this.samples < limit) {
-      if (this._trace(target, limit)) return this._status = 'compiling';
+      if (this._traceProgressive(target, limit)) return this._status = 'compiling';
     }
     this._maybeDenoise(false, limit);
     if (this._denoisePending) return this._status = this.converged ? 'denoising' : 'converging';
@@ -494,7 +575,7 @@ export default class Render {
     this._cancelAdaptiveFrames();
     this._cancelDenoise(); this._filterRevision++;
     this._filter = undefined; this._filterPending = undefined; this._filterKey = '';
-    this._target = undefined; this._input = {scene: -1, camera: -1, settings: ''};
+    this._target = undefined; this._batch = undefined; this._input = {scene: -1, camera: -1, settings: ''};
     this._status = recovering ? 'preparing' : 'error';
   }
   /** @internal */ _displayChanged() { this._cancelDenoise(); this._target?.invalidateDenoisedOutput(); }
@@ -581,7 +662,7 @@ export default class Render {
       const current = this._engine._inputs;
       if (current.scene !== inputs.scene || current.camera !== inputs.camera) throw new Error('Engine inputs changed during converge.');
     };
-    this._busy = true;
+    this._busy = true; this._batch = undefined;
     const abortConverge = () => this._cancelDenoise();
     options.signal?.addEventListener('abort', abortConverge, {once: true});
     let target: RenderTarget | undefined;
