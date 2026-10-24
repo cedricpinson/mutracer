@@ -38,7 +38,7 @@ describe('shadow catcher early-out at zero catcher alpha', () => {
     vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 });
     const branch = catcherBranch(
       rayTraceCompute({ hasDisplacement: false }),
-      /if \(ma\.materialType == SHADOW_CATCHER\) \{/,
+      /if \((?:si\.hit && )?ma\.materialType == SHADOW_CATCHER\) \{/,
       /\n {2}\}\n {2}else \{/
     );
     expectAlphaGatedShadowRays(

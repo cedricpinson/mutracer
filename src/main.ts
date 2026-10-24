@@ -28,6 +28,7 @@ export type { JNLMOptions } from './renderer/jnlm.js';
 // Scene description
 export type {
   AnalyticLight,
+  EquirectBackground,
   GroundedSkyboxBackground,
   Scene,
   SceneBackground,
@@ -50,8 +51,8 @@ export type {
   UVProjection
 } from './scene/OpenPBRMaterial.js';
 export { default as Texture } from './scene/Texture.js';
-export type { TextureDataSource } from './scene/Texture.js';
-export type { ColorRGB, ColorRGBA, Vec2, Vec3, Mat3, Mat4 } from './types.js';
+export type { TextureDataSource, TextureWrapMode, TextureColorSpace } from './scene/Texture.js';
+export type { ColorRGB, ColorRGBA, Vec2, Vec3, Mat4 } from './types.js';
 
 // Lights
 export { default as AmbientLight } from './scene/AmbientLight.js';

@@ -1,4 +1,4 @@
-import { ColorRGBA, Mat3 } from '../types.js';
+import { ColorRGBA, Mat4 } from '../types.js';
 import AmbientLight from './AmbientLight.js';
 import DirectionalLight from './DirectionalLight.js';
 import EnvironmentLight from './EnvironmentLight.js';
@@ -31,14 +31,35 @@ export interface GroundedSkyboxBackground {
   groundHeight?: number;
   /** Capture X/Z center in scene units. Default `[0, 0]`. */
   center?: [number, number];
+  /** Background rotation around +Y in radians, about the capture center. Default `0`; ground stays level. */
+  rotation?: number;
+  /** Nonnegative background RGB multiplier. Default `1`; lighting and alpha are unchanged. */
+  intensity?: number;
+}
+
+/**
+ * Equirectangular background texture with an orientation, like Three.js
+ * `scene.backgroundRotation`. A plain `Texture` background is not rotated.
+ */
+export interface EquirectBackground {
+  /** Rotated equirectangular discriminator; always `Equirect`. */
+  type: 'Equirect';
+  /** Required equirectangular texture. The first row is the zenith (+Y). */
+  map: Texture;
+  /**
+   * Column-major 4x4 matrix rotating the map from local to world space;
+   * translation and positive axis scale are ignored. Default identity.
+   */
+  transform?: Mat4;
 }
 
 /**
  * What camera rays that miss the scene show: a linear RGBA color (alpha 0
- * for a transparent canvas), an equirectangular texture, or a grounded
- * skybox. When omitted, the environment light is shown.
+ * for a transparent canvas), an equirectangular texture (plain, or rotated
+ * with {@link EquirectBackground}), or a grounded skybox. When omitted, the
+ * environment light is shown.
  */
-export type SceneBackground = ColorRGBA | Texture | GroundedSkyboxBackground;
+export type SceneBackground = ColorRGBA | Texture | EquirectBackground | GroundedSkyboxBackground;
 /**
  * Everything the renderer draws. A plain object; mesh and light membership,
  * mesh transforms, material parameters, resource references, light parameters and background
@@ -55,10 +76,5 @@ export interface Scene {
   lights: SceneLight[];
   /** Camera-ray background; defaults to the environment light when omitted. */
   background?: SceneBackground;
-  /**
-   * Orientation of an equirectangular or grounded-skybox background: column-major 3×3
-   * map-to-world rotation. Default identity. An omitted background follows
-   * `EnvironmentLight.rotation` instead.
-   */
-  backgroundRotation?: Mat3;
+
 }

@@ -80,8 +80,7 @@ export class CommittedScene {
   mirror<T extends object>(source: T): T { return this.copies.get(source); }
 
   capture(scene: Scene, changes: SceneChanges): Scene {
-    if (!this.value || changes.meshes === 'full') this.value = { meshes: this.copy(scene.meshes), lights: this.copy(scene.lights),
-      background: this.copy(scene.background), backgroundRotation: this.copy(scene.backgroundRotation) };
+    if (!this.value || changes.meshes === 'full') this.value = { meshes: this.copy(scene.meshes), lights: this.copy(scene.lights), background: this.copy(scene.background) };
     else {
       for (const mesh of changes.transforms) {
         this.copy(mesh.transform);
@@ -91,10 +90,7 @@ export class CommittedScene {
       for (const geometry of changes.geometries) this.copy(geometry, true);
       for (const material of changes.materials) this.copy(material);
       if (changes.lights) this.value.lights = this.copy(scene.lights);
-      if (changes.background) {
-        this.value.background = this.copy(scene.background);
-        this.value.backgroundRotation = this.copy(scene.backgroundRotation);
-      }
+      if (changes.background) this.value.background = this.copy(scene.background);
     }
     return this.value;
   }

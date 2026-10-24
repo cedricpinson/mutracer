@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DEFAULT_JNLM_OPTIONS } from '@meimu/mutracer';
 import type { BVHBuilder, OIDNModel, SamplingPattern, ToneMapping, DisplayChannel } from '@meimu/mutracer';
+import type { TextureSampling } from './engine/modelCache';
 import type { MaterialValues, TextureKey } from './engine/materialParams';
 import { STUDIO_PRESETS } from './engine/studio';
 import { historyLabels, onHistoryChange, pushHistory, type HistoryItem } from './history';
@@ -98,7 +99,7 @@ export const DEFAULT_SETTINGS: Settings = {
   studioAmbient: 0.1,
   studioAmbientColor: '#ffffff',
   studioSize: 1,
-  envId: 'studio_small_09',
+  envId: 'sky',
   envIntensity: 1,
   envRotation: 0,
   envResolution: '1k',
@@ -217,6 +218,9 @@ export interface SelectedMaterial {
   textures: string[];
   /** Texture in each slot, as a thumbnail URL; `''` when it cannot be drawn. */
   maps: Partial<Record<TextureKey, string>>;
+  sampling: Partial<Record<TextureKey, TextureSampling>>;
+  /** Suggested local-unit slider range for the selected mesh, without limiting typed values. */
+  displacementRange: { min: number; max: number; step: number };
 }
 
 /**
@@ -249,12 +253,13 @@ export interface ViewerState {
   tree: TreeNode[];
   sceneInfo: { meshes: number; triangles: number; materials: number };
   cameras: string[];
+  modelLighting: { available: boolean; warnings: string[] } | null;
   loading: LoadingState | null;
   envLoading: EnvLoadingState | null;
   /** Bounding radius of the loaded model in scene units. */
   modelRadius: number;
   error: string | null;
-  toast: { id: number; message: string; tone: 'info' | 'error' } | null;
+  toast: { id: number; message: string; tone: 'info' | 'error'; actions?: { label: string; onClick(): void }[] } | null;
   animation: AnimationState | null;
   selection: { objectId: string | null; materialId: string | null };
   material: SelectedMaterial | null;
@@ -358,6 +363,7 @@ export const useViewer = create<ViewerState>(() => ({
   tree: [],
   sceneInfo: { meshes: 0, triangles: 0, materials: 0 },
   cameras: [],
+  modelLighting: null,
   loading: null,
   envLoading: null,
   modelRadius: 1,
@@ -464,8 +470,8 @@ export function setUi(patch: Partial<ViewerState['ui']>) {
 }
 
 let toastId = 0;
-export function showToast(message: string, tone: 'info' | 'error' = 'info') {
-  useViewer.setState({ toast: { id: ++toastId, message, tone } });
+export function showToast(message: string, tone: 'info' | 'error' = 'info', actions?: NonNullable<ViewerState['toast']>['actions']) {
+  useViewer.setState({ toast: { id: ++toastId, message, tone, actions } });
 }
 
 useViewer.subscribe((state, prev) => {

@@ -63,6 +63,7 @@ sample count) on a real GPU before and after, and compare
   generated shader validity). Do not add tests that only restate source text.
 - Use Three.js `GLTFLoader` with `THREESync` in examples and comparisons.
 - Keep examples small: procedural or CC0 assets only, no large models.
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.
 - Code adapted from another project needs a compatible license, a source
   comment, an entry in `THIRD_PARTY_NOTICES.md` and the license text in
   `LICENSES/`. Do not copy code from sources whose license does not allow
@@ -120,7 +121,10 @@ sample count) on a real GPU before and after, and compare
 
 ## Commit messages
 
+- Keep the subject concise. Use the body when needed to explain the problem,
+  resulting behavior, implementation decisions and reasons for the change.
 - For viewer changes, include the `viewer` scope in the commit subject, for
   example `fix(viewer): correct camera controls` or `feat(viewer): add model search`.
-- Keep the commit subject concise. Put implementation details, the reason for
-  the change in the commit body (description).
+- Do not include validation sections, check commands, test counts, pass/fail
+  summaries or documentation-review notes in commit messages. Report verification
+  in the task reply or evidence files instead.

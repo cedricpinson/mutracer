@@ -223,7 +223,7 @@ describe('RenderLoop events and inference', () => {
     complete(true); await settle(); const count = operations.length;
     loop.tick(); await settle();
     expect(update).toHaveBeenCalledOnce(); expect(frame).toBe(4); expect(engine.scene!.background).toEqual([4, 0, 0, 1]);
-    expect(pipeline.setBackground).toHaveBeenLastCalledWith([4, 0, 0, 1], undefined);
+    expect(pipeline.setBackground).toHaveBeenLastCalledWith([4, 0, 0, 1]);
     expect(operations.slice(count).find(operation => operation.kind === 'present')?.id).toBe(targets[0].label);
     expect(targets[0].performDenoise).toHaveBeenCalledTimes(2); expect(targets[0].trace).toHaveBeenCalledTimes(2);
     complete(true); await settle(); loop.dispose(); engine.dispose();
@@ -254,7 +254,7 @@ describe('RenderLoop events and inference', () => {
     loop.tick(); let complete!: (value: boolean) => void;
     vi.mocked(targets[0].performDenoise!).mockImplementation(() => new Promise(resolve => {complete = resolve;})); await settle();
     scene.background = [.2, .3, .4, 1]; loop.tick();
-    expect(pipeline.setBackground).toHaveBeenLastCalledWith([.2, .3, .4, 1], undefined); expect(targets[0].trace).toHaveBeenCalledTimes(2);
+    expect(pipeline.setBackground).toHaveBeenLastCalledWith([.2, .3, .4, 1]); expect(targets[0].trace).toHaveBeenCalledTimes(2);
     complete(true); await settle(); loop.dispose(); engine.dispose();
   });
   it('starts independent final denoising when preview ends after completed interactive inference', async () => {
