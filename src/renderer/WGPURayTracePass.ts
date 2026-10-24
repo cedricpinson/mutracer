@@ -35,7 +35,7 @@ import { SceneBackground, SceneLight } from '../scene/Scene.js';
 import { numberArraysEqual } from './util.js';
 import Camera from '../scene/Camera.js';
 import {
-  generateBackgroundMapFromSceneBackground
+  generateBackgroundMapFromSceneBackground, environmentRotation, backgroundMapTransform
 } from './envMapCreation.js';
 import rayTraceCompute, { WORKGROUP_SIZE } from './wgsl/rayTrace.compute.js';
 import Geometry from '../scene/Geometry.js';
@@ -172,7 +172,7 @@ export function isWebGPUPipelineSpecializationFailure(...errors: unknown[]) {
 /** CPU-side views over the `RayTraceUniform` WGSL struct. */
 export function makeRayTraceUniform() {
   // Created from https://webgpufundamentals.org/webgpu/lessons/resources/wgsl-offset-computer.html
-  const RayTraceUniformValues = new ArrayBuffer(176);
+  const RayTraceUniformValues = new ArrayBuffer(256);
   const RayTraceUniformViews = {
     outputSize: new Float32Array(RayTraceUniformValues, 0, 2),
     sampleCount: new Float32Array(RayTraceUniformValues, 8, 1),
@@ -205,11 +205,15 @@ export function makeRayTraceUniform() {
     sampleSequenceOffset: new Uint32Array(RayTraceUniformValues, 164, 1),
     // Shadow-catcher light table, relative to lightChoiceTexelOffset.
     shadowCatcherChoiceOffset: new Int32Array(RayTraceUniformValues, 168, 1),
-    shadowCatcherChoiceCount: new Int32Array(RayTraceUniformValues, 172, 1)
+    shadowCatcherChoiceCount: new Int32Array(RayTraceUniformValues, 172, 1),
+    environmentRotation: new Float32Array(RayTraceUniformValues, 176, 16),
+    backgroundMapTransform: new Float32Array(RayTraceUniformValues, 240, 4)
   };
   // Fixed runtime trip bounds discourage thin-film loop unrolling. Keep 4 for
   // 2 polarizations/substrates and 3 channels, independent of BSDF budgets.
   RayTraceUniformViews.loopUnrollGuard[0] = 4;
+  RayTraceUniformViews.environmentRotation.set(environmentRotation([]));
+  RayTraceUniformViews.backgroundMapTransform.set(backgroundMapTransform());
   RayTraceUniformViews.bevel[0] = 1;
   RayTraceUniformViews.dispersionWavelengths[0] = 3;
   return {
@@ -277,7 +281,7 @@ export function packAnalyticsLightsToBuffer(
       data[(off + 2) * 4 + 3] = light.radius;
       packVec3(off + 3, [
         Math.cos((light.outerAngle * Math.PI) / 180),
-        Math.min(1, Math.max(0, 1 - light.innerAngle / light.outerAngle)),
+        Math.cos((Math.min(light.innerAngle, light.outerAngle) * Math.PI) / 180),
         0
       ]);
     } else if (light.type === 'DirectionalLight') {
@@ -285,7 +289,7 @@ export function packAnalyticsLightsToBuffer(
     }
     data[(off + 3) * 4 + 3] = light.type === 'SpotLight'
       ? iesProfileTexelOffsets[i] ?? -1
-      : texturesIndices[i];
+      : texturesIndices[i] ?? -1;
     data[(off + 4) * 4] = selectionPmfs[i] ?? 0;
     packVec3(off + 5, getRigidLightFrame(light).x);
   }
@@ -1027,8 +1031,6 @@ class WGPURayTracePass {
         ...MATERIAL_TEXTURE_DEFINES,
         'USE_ANISOTROPY_DIRECTIONS',
         'USE_COAT_NORMAL_FRAMES',
-        'COLOR_OFF',
-        'USE_VERTEX_COLOR',
         'HAS_ALPHA_BLEND',
         'HAS_ALPHA_MASK'
       ];
@@ -2006,6 +2008,7 @@ ${rayTraceCompute({
   }
 
   setBackground(background?: SceneBackground) {
+    this._rtUniform.views.backgroundMapTransform.set(backgroundMapTransform(background));
     this._constants.USE_BACKGROUND = !!background;
     const backgroundImage =
       background && !Array.isArray(background)
@@ -2230,7 +2233,7 @@ ${rayTraceCompute({
         (mesh) =>
           mesh.geometry === geometry &&
           !!mesh.materials[0]?.displacementMap &&
-          Math.abs(mesh.materials[0].displacementScale) > 1e-6
+          (mesh.materials[0].displacementScale !== 0 || mesh.materials[0].displacementBias !== 0)
       );
       if (usesDisplacement || geometryTopologyChanged(this._preparedMeshData, geometry) || !getGeometryBvh(geometry) || !refitBLAS(getGeometryBvh(geometry)!, geometry)) {
         setGeometryBvh(geometry, undefined);
@@ -2378,6 +2381,9 @@ ${rayTraceCompute({
       Number(this._constants.NUM_MAPS ?? 0),
       20
     );
+    // Either layer's map requires independent normals, including a smooth
+    // coat over a mapped base. Unmapped materials retain the shared path.
+    const USE_COAT_NORMAL_FRAMES = materials.some(m => m.coatWeight > 0 && (!!m.normalMap || !!m.coatNormalMap));
 
     Object.assign(this._constants, {
       // Match the atlas UV selector. Keep the second set when any texture
@@ -2388,8 +2394,8 @@ ${rayTraceCompute({
       USE_TANGENT: mergedGeometry.tangent != null &&
         materials.some(material => material.specularAnisotropy > 0 || material.coatAnisotropy > 0 || (!!material.coatNormalMap && material.coatWeight > 0)),
 
-      USE_COAT_NORMAL_FRAMES: materials.some(m => !!m.coatNormalMap && m.coatWeight > 0),
-      USE_ANISOTROPY_DIRECTIONS: materials.some(m => (!!m.coatNormalMap && m.coatWeight > 0) ||
+      USE_COAT_NORMAL_FRAMES,
+      USE_ANISOTROPY_DIRECTIONS: USE_COAT_NORMAL_FRAMES || materials.some(m =>
         m.specularAnisotropy > 0 && (m.specularAnisotropyModel === 'gltf' || !!m.anisotropyMap || m.specularAnisotropyRotation !== 0) ||
         m.coatAnisotropy > 0 && m.coatAnisotropyRotation !== 0),
       HAS_MEDIUM,
@@ -2633,6 +2639,8 @@ ${rayTraceCompute({
     for (let i = 0; i < mapUvChannel.length; i++) {
       mapInfoData[numMaps * 8 + i * 4] = mapUvChannel[i];
       mapInfoData[numMaps * 8 + i * 4 + 1] = mapColorLinear[i];
+      mapInfoData[numMaps * 8 + i * 4 + 2] = materialData.bufferData.mapWrap[i * 2];
+      mapInfoData[numMaps * 8 + i * 4 + 3] = materialData.bufferData.mapWrap[i * 2 + 1];
     }
     let mapInfoUniform = this._mapInfoUniform;
     if (!mapInfoUniform || mapInfoUniform.size !== mapInfoData.byteLength) {
@@ -2724,6 +2732,7 @@ ${rayTraceCompute({
     const numAnalyticLights = analyticLights.length;
 
     const envImage = this._sceneEnvironment.update(lights);
+    this._rtUniform.views.environmentRotation.set(environmentRotation(lights));
 
     this._rtUniform.views.lightsCount[0] = numAnalyticLights;
 

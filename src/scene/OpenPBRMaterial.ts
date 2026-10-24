@@ -191,7 +191,7 @@ export default class OpenPBRMaterial {
   specularAnisotropyModel: 'openpbr' | 'gltf' = 'openpbr';
   /** Linear RG tangent direction and B strength multiplier for the base specular layer. Default `undefined`. */
   anisotropyMap?: Texture;
-  /** Independent tangent-space coat normal in linear RGB. Without a map, coat shares the existing shading normal. Default `undefined`. */
+  /** Independent tangent-space coat normal in linear RGB. Without a map, coat uses the surface normal before base normal mapping. Default `undefined`. */
   coatNormalMap?: Texture;
   /** XY strength of coatNormalMap; independent of normalScale. Default `[1, 1]`. */
   coatNormalScale: Vec2 = materialDefault('coatNormalScale');
@@ -244,9 +244,11 @@ export default class OpenPBRMaterial {
   displacementUvProjection: UVProjection = materialDefault('displacementUvProjection');
   /** UV scale used with `displacementUvProjection`. Default `1`. */
   displacementUvProjectionScale: number = materialDefault('displacementUvProjectionScale');
-  /** Height multiplier in mesh-local coordinate units. Default `0.1`. */
+  /** Height multiplier in mesh-local units; 0 removes height variation. Default `0.1`. */
   displacementScale: number = materialDefault('displacementScale');
-  /** Ray-marching step for projective displacement. Default `0.01`. */
+  /** Offset added after scaling the height map, along the normal in mesh-local units; requires a displacement map. Default `0`. */
+  displacementBias: number = materialDefault('displacementBias');
+  /** Ray-marching step in mesh-local units; 0 automatically uses abs(displacementScale) / 32. Default `0`. */
   displacementStepSize: number = materialDefault('displacementStepSize');
 
 }

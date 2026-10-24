@@ -2,6 +2,7 @@ import { Button, Dialog, DialogTrigger, Heading, Popover } from 'react-aria-comp
 import { Check, Pause, Play, SlidersHorizontal, X } from 'lucide-react';
 import { setSettings, useViewer, type RenderPhase } from '../store';
 import { Field, Select, Switch } from './ui/controls';
+import { ViewControls } from './ViewControls';
 
 const LABELS: Record<RenderPhase, string> = {
   starting: 'Starting',
@@ -49,7 +50,7 @@ function ProgressRing({ progress, phase }: { progress: number; phase: RenderPhas
 /**
  * Bottom dock: progress and the render settings people change most.
  * Everything else lives in the Render tab. The status block has a fixed
- * width so the centred dock does not shift while numbers change.
+ * width so neighboring controls stay steady while numbers change.
  */
 export function StatusBar() {
   const stats = useViewer((s) => s.stats);
@@ -71,6 +72,7 @@ export function StatusBar() {
 
   return (
     <div className="float dock" role="status" data-phase={phase}>
+      <ViewControls />
       <div className="dock__summary">
         <ProgressRing progress={progress} phase={phase} />
         <div className="dock__status" title={done && msPerSample ? `${elapsed.toFixed(1)} s · ${msPerSample.toFixed(1)} ms per sample` : undefined}>

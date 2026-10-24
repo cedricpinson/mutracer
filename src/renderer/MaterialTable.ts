@@ -24,7 +24,7 @@ import OpenPBRMaterial, {
 } from '../scene/OpenPBRMaterial.js';
 import { ColorRGB } from '../types.js';
 import { mergeTexturesFromMaterials } from './texturesFromMaterials.js';
-import Texture, { isTextureDataSource } from '../scene/Texture.js';
+import Texture, { isTextureDataSource, textureWrapIndex } from '../scene/Texture.js';
 import { commonNearestFloatProps, setDataTexture } from './dataTextureUtil.js';
 import { SceneLight } from '../scene/Scene.js';
 
@@ -246,6 +246,7 @@ function makeTextureArray(
       mapTransform: [] as number[],
       mapUvChannel: [] as number[],
       mapColorLinear: [] as number[],
+      mapWrap: [] as number[],
       stats: {
         estimatedBytes: 0,
         height: 1,
@@ -274,10 +275,12 @@ function makeTextureArray(
   );
   const mapColorLinear = textures.map(texture => {
     const image = texture.image;
-    return Number(isTextureDataSource(image) &&
+    return Number(texture.colorSpace ? texture.colorSpace === 'linear' : isTextureDataSource(image) &&
       !(image.data instanceof Uint8Array) && !(image.data instanceof Uint8ClampedArray));
   });
-  const floatStorage = mapColorLinear.some(Boolean);
+  // Storage precision depends on the pixels, independently of their transfer function.
+  const floatStorage = textures.some(({image}) => isTextureDataSource(image) &&
+    !(image.data instanceof Uint8Array) && !(image.data instanceof Uint8ClampedArray));
   const bytesPerPixel = floatStorage ? 8 : 4;
 
   const maxTextureArrayLayers = options.maxTextureArrayLayers ?? Infinity;
@@ -413,6 +416,7 @@ function makeTextureArray(
       texture.uvOffset[1]
     ]),
     mapUvChannel: textures.map((texture) => texture.uvChannel),
+    mapWrap: textures.flatMap(texture => [textureWrapIndex(texture.wrapS), textureWrapIndex(texture.wrapT)]),
     mapColorLinear,
     stats: {
       estimatedBytes: atlasWidth * atlasHeight * pages.length * bytesPerPixel,
@@ -450,6 +454,7 @@ export interface BufferData extends Record<MaterialTextureIndex, number[]> {
   type: (typeof ShadowCatcherMaterial | typeof UnlitMaterial | 0)[];
   mapInfo: number[];
   mapTransform: number[];
+  mapWrap: number[];
   mapUvChannel: number[];
   mapColorLinear: number[];
 
@@ -467,6 +472,7 @@ export interface BufferData extends Record<MaterialTextureIndex, number[]> {
 
   // For PDM displacement.
   displacementStepSize: number[];
+  displacementBias: number[];
 
   // Alpha
   alpha: number[];
@@ -666,7 +672,7 @@ class MaterialTable {
         lightTexturesIndices.push(-1);
       }
     }
-    const { mapInfo, mapTransform, mapUvChannel, mapColorLinear, stats, texture } = makeTextureArray(
+    const { mapInfo, mapTransform, mapUvChannel, mapColorLinear, mapWrap, stats, texture } = makeTextureArray(
       allTextures,
       false,
       options
@@ -676,6 +682,7 @@ class MaterialTable {
     this.textureAtlasStats = stats;
     bufferData.mapInfo = mapInfo;
     bufferData.mapTransform = mapTransform;
+    bufferData.mapWrap = mapWrap;
     bufferData.mapUvChannel = mapUvChannel;
     bufferData.mapColorLinear = mapColorLinear;
     for (const slot of MATERIAL_TEXTURE_SLOTS) {
@@ -744,8 +751,9 @@ class MaterialTable {
         (m) => uvProjectionConstants[m.displacementUvProjection] || 0
       ),
       displacementUvProjectionScale: materials.map((m) => m.displacementUvProjectionScale || 1),
+      displacementBias: materials.map((m) => m.displacementBias),
       displacementStepSize: materials.map(
-        (m) => m.displacementStepSize || 0.01
+        (m) => Number.isFinite(m.displacementStepSize) && m.displacementStepSize > 0 ? m.displacementStepSize : 0
       ),
 
       // Alpha
@@ -820,6 +828,7 @@ class MaterialTable {
     pass.setUniform('map', this.texture || null);
     pass.setUniform('mapInfo', this.bufferData.mapInfo);
     pass.setUniform('mapTransform', this.bufferData.mapTransform);
+    pass.setUniform('mapWrap', this.bufferData.mapWrap);
     pass.setUniform('mapUvChannel', this.bufferData.mapUvChannel);
     pass.setUniform('mapColorLinear', this.bufferData.mapColorLinear);
     pass.setUniforms({

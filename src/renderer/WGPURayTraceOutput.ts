@@ -13,8 +13,6 @@ ${shadowCatcherAccumulationWGSL}
 
 @group(1) @binding(0) var<uniform> sampleCount: f32;
 @group(1) @binding(1) var<uniform> sampleTileGrid: vec2u;
-${layers ? `// The display's flat background colour; alpha 0 when there is none.
-@group(1) @binding(2) var<uniform> flatBackground: vec4f;` : ''}
 
 override outputWidth: f32;
 override outputHeight: f32;
@@ -66,16 +64,12 @@ fn main(@builtin(position) coord: vec4f) -> FSOutput {
   ${layers ? `
   let shadow = shadowCatcherBuffer[idx];
   let foregroundHit = max(hit - shadow.mask.b, 0.0);
-  // Over a flat background colour every miss is a blank sample that still
-  // accumulated that colour at full alpha. The display composes the colour
-  // from coverage instead, so keep those misses out of the geometry layer:
-  // averaged over the geometry hits alone they would dim it at partially
-  // covered catcher pixels, such as the catcher's far edge.
-  let flatMisses = select(0.0, max(total - hit, 0.0), flatBackground.a > 0.5);
+  // Separated background includes flat primary misses as well as catcher
+  // samples. Neither belongs in the hit-normalized geometry color/alpha.
   output.foreground = vec4f(
-    max(color.rgb - shadow.background.rgb - flatBackground.rgb * flatMisses, vec3f(0.0))
+    (color.rgb - shadow.background.rgb)
       / select(total, foregroundHit, foregroundHit > 0.0),
-    clamp((color.a - shadow.mask.g - flatMisses) / total, 0.0, 1.0)
+    clamp((color.a - shadow.mask.g) / total, 0.0, 1.0)
   );
   output.catcherBackground = shadow.background / total;
   ` : `output.color = vec4f(
@@ -138,11 +132,6 @@ export class WGPURayTraceOutputPass {
       }),
       sampleTileGrid: device.createBuffer({
         size: 8,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-      }),
-      // Read only by the catcher layers pass (binding order matters there).
-      flatBackground: device.createBuffer({
-        size: 16,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       })
     };
@@ -322,15 +311,6 @@ export class WGPURayTraceOutputPass {
       this._uniformsBuffers.sampleTileGrid,
       0,
       new Uint32Array([columns, rows])
-    );
-  }
-
-  /** The display's flat background colour (RGBA, alpha 0 for none), for the catcher layers. */
-  setFlatBackground(color: ArrayLike<number>) {
-    this._device.queue.writeBuffer(
-      this._uniformsBuffers.flatBackground,
-      0,
-      new Float32Array([color[0], color[1], color[2], color[3]])
     );
   }
 
