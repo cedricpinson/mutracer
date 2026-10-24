@@ -8,7 +8,7 @@ MuTracer renders a plain **scene description** with a **camera**:
 interface Scene {
   meshes: Mesh[];          // geometry + one OpenPBRMaterial per group
   lights: SceneLight[];    // analytic lights, environment and ambient light
-  background?: ColorRGBA | Texture | GroundedSkyboxBackground;
+  background?: ColorRGBA | Texture | EquirectBackground | GroundedSkyboxBackground;
 }
 ```
 

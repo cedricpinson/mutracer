@@ -68,6 +68,18 @@ async function run() {
           record(`${kind} rotation ${euler.order} ${euler.y}`,expected,await capture());
         }
       }
+      // A texture background turns by scene.backgroundRotation alone, like rotating the camera the other way.
+      source.background=original;
+      for (const euler of [new THREE.Euler(0,Math.PI/2,0),new THREE.Euler(.3,.7,-.2,'ZYX')]) {
+        const inverse=new THREE.Matrix4().makeRotationFromEuler(euler).invert();
+        const baseMesh=new THREE.Matrix4().makeTranslation(100,0,0);
+        source.environmentRotation.set(0,0,0); source.backgroundRotation.set(0,0,0);
+        mesh.matrix.copy(inverse.clone().multiply(baseMesh)); camera.matrix.copy(inverse.clone().multiply(base));
+        const expected=await capture();
+        mesh.matrix.copy(baseMesh); camera.matrix.copy(base); source.backgroundRotation.copy(euler);
+        record(`backgroundRotation ${euler.order} ${euler.y}`,expected,await capture());
+      }
+      source.backgroundRotation.set(0,0,0);
     } else for (const intensity of [0,.5,2]) {
       source.environmentIntensity=1;
       const scaled = new THREE.DataTexture(pixels.map((value,index)=>index%4===3?value:value*intensity),4,2,THREE.RGBAFormat,THREE.FloatType);

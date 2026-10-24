@@ -98,7 +98,8 @@ later wrap edits synchronize automatically. Displacement uses the same modes.
 `scene.environmentIntensity` controls environment lighting, including zero;
 `scene.environmentRotation` rotates it using the source Euler order. Both
 synchronize automatically. They do not change ambient lights or an explicitly
-assigned `scene.background` texture.
+assigned `scene.background` texture, which `scene.backgroundRotation` rotates
+instead (also with the source Euler order, synchronized automatically).
 
 Thin-film ranges keep their endpoint order, including minimum greater than
 maximum, and retain the converter's 0–20 µm endpoint clamp. The converter uses

@@ -269,6 +269,8 @@ struct RayTraceUniform {
   shadowCatcherChoiceCount: i32,
   environmentRotation: mat4x4f,
   backgroundMapTransform: vec4f,
+  // Map-to-world rotation of an Equirect background (identity otherwise).
+  backgroundMapRotation: mat4x4f,
 }
 
 // Buffers

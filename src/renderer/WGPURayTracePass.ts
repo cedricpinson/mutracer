@@ -35,7 +35,7 @@ import { SceneBackground, SceneLight } from '../scene/Scene.js';
 import { numberArraysEqual } from './util.js';
 import Camera from '../scene/Camera.js';
 import {
-  generateBackgroundMapFromSceneBackground, environmentRotation, backgroundMapTransform
+  generateBackgroundMapFromSceneBackground, environmentRotation, backgroundMapTransform, backgroundMapRotation
 } from './envMapCreation.js';
 import rayTraceCompute, { WORKGROUP_SIZE } from './wgsl/rayTrace.compute.js';
 import Geometry from '../scene/Geometry.js';
@@ -172,7 +172,7 @@ export function isWebGPUPipelineSpecializationFailure(...errors: unknown[]) {
 /** CPU-side views over the `RayTraceUniform` WGSL struct. */
 export function makeRayTraceUniform() {
   // Created from https://webgpufundamentals.org/webgpu/lessons/resources/wgsl-offset-computer.html
-  const RayTraceUniformValues = new ArrayBuffer(256);
+  const RayTraceUniformValues = new ArrayBuffer(320);
   const RayTraceUniformViews = {
     outputSize: new Float32Array(RayTraceUniformValues, 0, 2),
     sampleCount: new Float32Array(RayTraceUniformValues, 8, 1),
@@ -207,13 +207,15 @@ export function makeRayTraceUniform() {
     shadowCatcherChoiceOffset: new Int32Array(RayTraceUniformValues, 168, 1),
     shadowCatcherChoiceCount: new Int32Array(RayTraceUniformValues, 172, 1),
     environmentRotation: new Float32Array(RayTraceUniformValues, 176, 16),
-    backgroundMapTransform: new Float32Array(RayTraceUniformValues, 240, 4)
+    backgroundMapTransform: new Float32Array(RayTraceUniformValues, 240, 4),
+    backgroundMapRotation: new Float32Array(RayTraceUniformValues, 256, 16)
   };
   // Fixed runtime trip bounds discourage thin-film loop unrolling. Keep 4 for
   // 2 polarizations/substrates and 3 channels, independent of BSDF budgets.
   RayTraceUniformViews.loopUnrollGuard[0] = 4;
   RayTraceUniformViews.environmentRotation.set(environmentRotation([]));
   RayTraceUniformViews.backgroundMapTransform.set(backgroundMapTransform());
+  RayTraceUniformViews.backgroundMapRotation.set(backgroundMapRotation());
   RayTraceUniformViews.bevel[0] = 1;
   RayTraceUniformViews.dispersionWavelengths[0] = 3;
   return {
@@ -2009,6 +2011,7 @@ ${rayTraceCompute({
 
   setBackground(background?: SceneBackground) {
     this._rtUniform.views.backgroundMapTransform.set(backgroundMapTransform(background));
+    this._rtUniform.views.backgroundMapRotation.set(backgroundMapRotation(background));
     this._constants.USE_BACKGROUND = !!background;
     const backgroundImage =
       background && !Array.isArray(background)
