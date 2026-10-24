@@ -1,4 +1,4 @@
-import { ColorRGBA } from '../types.js';
+import { ColorRGBA, Mat4 } from '../types.js';
 import AmbientLight from './AmbientLight.js';
 import DirectionalLight from './DirectionalLight.js';
 import EnvironmentLight from './EnvironmentLight.js';
@@ -38,11 +38,28 @@ export interface GroundedSkyboxBackground {
 }
 
 /**
- * What camera rays that miss the scene show: a linear RGBA color (alpha 0
- * for a transparent canvas), an equirectangular texture, or a grounded
- * skybox. When omitted, the environment light is shown.
+ * Equirectangular background texture with an orientation, like Three.js
+ * `scene.backgroundRotation`. A plain `Texture` background is not rotated.
  */
-export type SceneBackground = ColorRGBA | Texture | GroundedSkyboxBackground;
+export interface EquirectBackground {
+  /** Rotated equirectangular discriminator; always `Equirect`. */
+  type: 'Equirect';
+  /** Required equirectangular texture. The first row is the zenith (+Y). */
+  map: Texture;
+  /**
+   * Column-major 4x4 matrix rotating the map from local to world space;
+   * translation and positive axis scale are ignored. Default identity.
+   */
+  transform?: Mat4;
+}
+
+/**
+ * What camera rays that miss the scene show: a linear RGBA color (alpha 0
+ * for a transparent canvas), an equirectangular texture (plain, or rotated
+ * with {@link EquirectBackground}), or a grounded skybox. When omitted, the
+ * environment light is shown.
+ */
+export type SceneBackground = ColorRGBA | Texture | EquirectBackground | GroundedSkyboxBackground;
 /**
  * Everything the renderer draws. A plain object; mesh and light membership,
  * mesh transforms, material parameters, resource references, light parameters and background

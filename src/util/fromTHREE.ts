@@ -20,7 +20,7 @@ import SpotLight from '../scene/SpotLight.js';
 import IESProfile from '../scene/IESProfile.js';
 import Camera from '../scene/Camera.js';
 import { ColorRGB, ColorRGBA } from '../types.js';
-import { GroundedSkyboxBackground, Scene, SceneLight } from '../scene/Scene.js';
+import { EquirectBackground, GroundedSkyboxBackground, Scene, SceneLight } from '../scene/Scene.js';
 import { mat4 } from '../math.js';
 import { generateVertexNormals, updateBoundingBox, updateDynamicTangents } from './geometry.js';
 import { THREEDeformation, isDeformingMesh } from './threeDeformation.js';
@@ -1186,7 +1186,7 @@ function convertScene(scene: THREE.Scene, options: FromTHREESceneOptions, store:
   const groundedTexture = grounded && convertDataTexture(grounded.texture, store.equirectTextures);
   const hideEnvironmentBackground =
     scene.userData.mutracerHiddenBackground === true;
-  let background: GroundedSkyboxBackground | ColorRGBA | Texture | undefined =
+  let background: GroundedSkyboxBackground | EquirectBackground | ColorRGBA | Texture | undefined =
     hideEnvironmentBackground
       ? [0, 0, 0, 0]
       : grounded && groundedTexture
@@ -1207,12 +1207,21 @@ function convertScene(scene: THREE.Scene, options: FromTHREESceneOptions, store:
               ? environmentLight.map
               : convertDataTexture(scene.background as THREE.DataTexture, store.equirectTextures)
           : undefined;
+  // Three.js turns a texture background by scene.backgroundRotation, not by environmentRotation.
+  const backgroundRotation = scene.backgroundRotation;
+  if (background instanceof Texture && (backgroundRotation.x || backgroundRotation.y || backgroundRotation.z)) {
+    background = {
+      type: 'Equirect',
+      map: background,
+      transform: scene.matrix.clone().makeRotationFromEuler(backgroundRotation).elements.slice()
+    };
+  }
 
   const oldBackground = store.background;
   if (Array.isArray(background) && Array.isArray(oldBackground) && snapshotsEqual(background, oldBackground)) {
     background = oldBackground;
   } else if (background && oldBackground && !Array.isArray(background) && !Array.isArray(oldBackground)
-    && !(background instanceof Texture) && !(oldBackground instanceof Texture)) {
+    && !(background instanceof Texture) && !(oldBackground instanceof Texture) && background.type === oldBackground.type) {
     // Compare by values, ignoring the newly constructed wrapper's identity.
     if (snapshotsEqual(snapshotFields(background).slice(1), snapshotFields(oldBackground).slice(1))) background = oldBackground;
     else { Object.assign(oldBackground, background); background = oldBackground; }

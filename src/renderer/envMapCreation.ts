@@ -15,18 +15,29 @@ import EnvironmentLight from '../scene/EnvironmentLight.js';
 import { SceneBackground, SceneLight } from '../scene/Scene.js';
 import type { EnvironmentMapSource } from './envMapDistribution.js';
 
-/** Rotation only: translation does not affect a light at infinity. */
-export function environmentRotation(lights: readonly SceneLight[]): Float32Array {
+/** The rotation part of a column-major 4x4 transform, as a 4x4 matrix; identity when omitted. */
+function rotationOnly(transform?: ArrayLike<number>): Float32Array {
   const matrix = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
-  const light = lights.find(light => light.type === 'EnvironmentLight');
-  if (light?.type === 'EnvironmentLight') {
+  if (transform) {
     for (let column = 0; column < 3; column++) {
       const offset = column * 4;
-      const length = Math.hypot(light.transform[offset], light.transform[offset+1], light.transform[offset+2]);
-      if (length > 0) for (let row = 0; row < 3; row++) matrix[offset+row] = light.transform[offset+row] / length;
+      const length = Math.hypot(transform[offset], transform[offset+1], transform[offset+2]);
+      if (length > 0) for (let row = 0; row < 3; row++) matrix[offset+row] = transform[offset+row] / length;
     }
   }
   return matrix;
+}
+
+/** Rotation only: translation does not affect a light at infinity. */
+export function environmentRotation(lights: readonly SceneLight[]): Float32Array {
+  const light = lights.find(light => light.type === 'EnvironmentLight');
+  return rotationOnly(light?.type === 'EnvironmentLight' ? light.transform : undefined);
+}
+
+/** Map-to-world rotation of an {@link EquirectBackground}; identity for any other background. */
+export function backgroundMapRotation(background?: SceneBackground): Float32Array {
+  const equirect = background && !Array.isArray(background) && 'type' in background && background.type === 'Equirect' ? background : undefined;
+  return rotationOnly(equirect?.transform);
 }
 
 /** Cosine/sine of inverse-lookup yaw and radiance scale; independent of lighting. */

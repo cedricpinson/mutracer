@@ -32,7 +32,7 @@ import {
   type FlattendBVH
 } from './bvhAccel.js';
 import {
-  generateBackgroundMapFromSceneBackground, environmentRotation, backgroundMapTransform
+  generateBackgroundMapFromSceneBackground, environmentRotation, backgroundMapTransform, backgroundMapRotation
 } from './envMapCreation.js';
 import {
   envMapDistribution,
@@ -195,6 +195,7 @@ class WebGLRayTracePass {
   private _groundedBackgroundParams = new Float32Array([0, 0, 0, 0]);
   private _groundedBackgroundCenter = new Float32Array([0, 0]);
   private _backgroundMapTransform = backgroundMapTransform();
+  private _backgroundMapRotation = new Float32Array([1,0,0, 0,1,0, 0,0,1]);
 
   private _bounces = 2;
   private _bevelSamples = DEFAULT_BEVEL_SAMPLES;
@@ -380,6 +381,8 @@ class WebGLRayTracePass {
 
   setBackground(background?: SceneBackground) {
     this._backgroundMapTransform.set(backgroundMapTransform(background));
+    const rotation = backgroundMapRotation(background);
+    this._backgroundMapRotation.set([rotation[0], rotation[1], rotation[2], rotation[4], rotation[5], rotation[6], rotation[8], rotation[9], rotation[10]]);
     const backgroundImage =
       background && generateBackgroundMapFromSceneBackground(background)!;
 
@@ -1020,6 +1023,7 @@ class WebGLRayTracePass {
       pass.setUniform('groundedBackgroundParams', this._groundedBackgroundParams);
       pass.setUniform('groundedBackgroundCenter', this._groundedBackgroundCenter);
       pass.setUniform('backgroundMapTransform', this._backgroundMapTransform);
+      pass.setUniform('backgroundMapRotation', this._backgroundMapRotation);
 
       pass.setDefines({
         // Double bounce fix on intel mac
