@@ -242,7 +242,7 @@ export default class Engine {
       transforms: [...this._pendingTransforms], colors: [...this._pendingColors], geometries: [...this._pendingGeometries], materials: [...this._pendingMaterials]
     });
     if (this._pendingLights) pipeline.setLights(scene.lights);
-    if (this._pendingBackground) pipeline.setBackground(scene.background, scene.backgroundRotation);
+    if (this._pendingBackground) pipeline.setBackground(scene.background);
     this._pendingMeshes = 'none'; this._pendingLights = false; this._pendingBackground = false;
     this._pendingTransforms.clear(); this._pendingColors.clear(); this._pendingGeometries.clear(); this._pendingMaterials.clear();
     this._uploadedRevision = this._sceneRevision;

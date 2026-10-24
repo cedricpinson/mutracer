@@ -266,9 +266,6 @@ struct RayTraceUniform {
   // Shadow-catcher light table, relative to lightChoiceTexelOffset.
   shadowCatcherChoiceOffset: i32,
   shadowCatcherChoiceCount: i32,
-  // Map-to-world rotations of the environment and of a map background.
-  envRotation: mat3x3f,
-  backgroundRotation: mat3x3f,
 }
 
 // Buffers

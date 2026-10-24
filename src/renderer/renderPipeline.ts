@@ -75,8 +75,8 @@ export function makeRenderPipeline(
     releaseTarget(target) { if (targets.delete(target)) { settings.delete(target); target.dispose(); } },
     setMeshes: (meshes, update) => scene.setMeshes(meshes, update),
     setLights: lights => scene.setLights(lights),
-    setBackground(value, rotation) {
-      background = value; scene.setBackground(value, rotation);
+    setBackground(value) {
+      background = value; scene.setBackground(value);
       for (const target of targets) target.synchronizeBackground(value);
     },
     setTextureAtlasBudget: bytes => scene.setTextureAtlasBudget(bytes),

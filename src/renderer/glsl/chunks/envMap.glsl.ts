@@ -7,29 +7,19 @@
 
 import { createShaderMixin, glsl, Shader } from '../../shader.js';
 
-const IDENTITY_MAT3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
-
 export default createShaderMixin({
   uniforms: {
     envMap: Shader.uniform('sampler2D'),
     envMapDistribution: Shader.uniform('sampler2D'),
     backgroundMap: Shader.uniform('sampler2D'),
     groundedBackgroundParams: Shader.uniform('vec4'),
-    groundedBackgroundCenter: Shader.uniform('vec2'),
-    // Map-to-world rotations of the environment and of a map background.
-    envRotation: Shader.uniform('mat3', IDENTITY_MAT3),
-    backgroundRotation: Shader.uniform('mat3', IDENTITY_MAT3)
+    groundedBackgroundCenter: Shader.uniform('vec2')
   },
   main: glsl`
 vec2 cartesianToEquirect(vec3 pointOnSphere) {
   float phi = mod(atan(-pointOnSphere.z, -pointOnSphere.x), TWOPI);
   float theta = acos(pointOnSphere.y);
   return vec2(phi * 0.5 * INVPI, theta * INVPI);
-}
-
-// World direction to environment map UV. d * M is transpose(M) * d: world to map.
-vec2 envMapUv(vec3 worldDirection) {
-  return cartesianToEquirect(worldDirection * envRotation);
 }
 
 float getEnvmapV(float u, out int vOffset, out float pdf) {
@@ -101,10 +91,9 @@ vec3 sampleEnvmap(vec2 random, out vec2 uv, out float pdf) {
 
   vec3 dir = vec3(-sinTheta * cosPhi, cosTheta, -sinTheta * sinPhi);
 
-  // Rotations preserve solid angle, so the pdf is unchanged.
   pdf = partialPdf.x * partialPdf.y * INVPI2 / (2.0 * sinTheta);
 
-  return envRotation * dir;
+  return dir;
 }
 
 float envMapPdf(vec2 uv) {
@@ -199,7 +188,7 @@ vec3 groundedBackgroundDirection(vec3 origin, vec3 d) {
 
 vec4 sampleBackgroundFromRay(vec3 origin, vec3 d) {
   d = groundedBackgroundDirection(origin, d);
-  vec2 uv = cartesianToEquirect(d * backgroundRotation);
+  vec2 uv = cartesianToEquirect(d);
   return textureLinear(backgroundMap, uv);
 }`
 });

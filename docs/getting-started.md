@@ -9,7 +9,6 @@ interface Scene {
   meshes: Mesh[];          // geometry + one OpenPBRMaterial per group
   lights: SceneLight[];    // analytic lights, environment and ambient light
   background?: ColorRGBA | Texture | GroundedSkyboxBackground;
-  backgroundRotation?: Mat3; // orients a Texture or GroundedSkybox background
 }
 ```
 
@@ -123,7 +122,7 @@ cameras have no depth of field.
 | `SpotLight` | `{ color?, intensity?, radius?, innerAngle?, outerAngle?, iesProfile? }` | Cone, optional IES emission |
 | `DirectionalLight` | `{ color?, intensity? }` | Emits along local -Z |
 | `AmbientLight` | `{ color?, intensity? }` | Uniform environment radiance |
-| `EnvironmentLight` | `{ map, rotation? }` | Equirectangular HDR illumination |
+| `EnvironmentLight` | `{ map }` | Equirectangular HDR illumination |
 
 Place analytic lights with `light.position = [x, y, z]` and `light.lookAt(target)`.
 Their transform scale is ignored; `size` and `radius` set emitter dimensions.
@@ -132,24 +131,17 @@ orient a profile. Invalid mutable values are clamped and reported once without
 failing the render (through `error` events when attached).
 
 Load `.hdr` environments with `await loadRGBE(url)`, which resolves to a
-float `Texture`. `EnvironmentLight.rotation` orients the map: a column-major
-3×3 matrix (gl-matrix `mat3`) from map to world directions, identity by
-default. Editing it keeps the map and its sampling distribution; accumulated
-samples restart. Emissive materials (`emissionLuminance > 0`) also act as
+float `Texture`. Emissive materials (`emissionLuminance > 0`) also act as
 lights.
 
 ## Backgrounds
 
-- omitted: camera rays show the environment light, with its rotation;
+- omitted: camera rays show the environment light;
 - `[r, g, b, a]`: a linear color. `[0, 0, 0, 0]` gives a transparent canvas;
   combine with `shadowCatcher` materials to composite over a web page;
 - a `Texture`: an equirectangular background independent of the lighting;
 - `{ type: 'GroundedSkybox', map, height, radius }`: projects the environment
   onto a ground plane.
-
-`scene.backgroundRotation` orients a `Texture` or grounded-skybox background
-the same way `EnvironmentLight.rotation` orients the lighting. Set both to the
-same matrix to turn a visible environment as a whole.
 
 ## Updating the scene
 

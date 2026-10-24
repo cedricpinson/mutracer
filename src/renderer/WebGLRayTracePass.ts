@@ -1,5 +1,4 @@
 import { normalizeBounces } from './pathLimits.js';
-import type { Mat3 } from '../types.js';
 import { updateMeshInstanceColors } from './prepareMeshBVH.js';
 import { updateTLASInstanceColors } from './bvhAccel.js';
 import { getMaterialHashKey } from '../scene/openPbrSchema.js';
@@ -195,9 +194,6 @@ class WebGLRayTracePass {
   private _hasBackground = false;
   private _groundedBackgroundParams = new Float32Array([0, 0, 0, 0]);
   private _groundedBackgroundCenter = new Float32Array([0, 0]);
-  // Column-major map-to-world rotations; identity until a scene sets them.
-  private _envRotation = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
-  private _backgroundRotation = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
   private _bounces = 2;
   private _bevelSamples = DEFAULT_BEVEL_SAMPLES;
@@ -381,8 +377,7 @@ class WebGLRayTracePass {
     this._hasEnvMap = !!envImage;
   }
 
-  setBackground(background?: SceneBackground, rotation?: Mat3) {
-    this._backgroundRotation.set(rotation ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+  setBackground(background?: SceneBackground) {
     const backgroundImage =
       background && generateBackgroundMapFromSceneBackground(background)!;
 
@@ -814,8 +809,6 @@ class WebGLRayTracePass {
     const numAnalyticLights = analyticLights.length;
 
     const envImage = this._sceneEnvironment.update(lights);
-    const environmentLight = lights.find(light => light.type === 'EnvironmentLight');
-    this._envRotation.set(environmentLight?.rotation ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
     const envWeight = estimateEnvironmentPower(envImage);
     const analyticWeights = analyticLights.map(estimateAnalyticLightPower);
@@ -1017,9 +1010,6 @@ class WebGLRayTracePass {
       pass.setUniform('iesProfileData', this._iesProfileTex);
       pass.setUniform('iesProfileColumns', this._iesProfileColumns);
       pass.setUniform('groundedBackgroundParams', this._groundedBackgroundParams);
-      pass.setUniform('envRotation', this._envRotation);
-      // Without a background map, backgroundMap is the environment and follows its rotation.
-      pass.setUniform('backgroundRotation', this._hasBackground ? this._backgroundRotation : this._envRotation);
       pass.setUniform('groundedBackgroundCenter', this._groundedBackgroundCenter);
 
       pass.setDefines({

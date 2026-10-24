@@ -690,17 +690,6 @@ function geometryStateMatches(geometry: THREE.BufferGeometry, state: readonly un
   }
   return field === state.length;
 }
-/**
- * Column-major 3×3 rotation of a Three.js Euler, or undefined when it is missing (Three.js
- * releases before r162). This module imports Three.js types only, so the matrix comes from
- * the scene's own Matrix4 class.
- */
-function eulerToMat3(scene: THREE.Scene, euler: THREE.Euler | undefined): number[] | undefined {
-  if (!euler) return;
-  const e = scene.matrix.clone().makeRotationFromEuler(euler).elements;
-  return [e[0], e[1], e[2], e[4], e[5], e[6], e[8], e[9], e[10]];
-}
-
 function retainLight(store: ConversionStore, source: THREE.Object3D | THREE.Texture, value: SceneLight) {
   const cached = store.lights.get(source);
   if (!cached || cached.type !== value.type) {
@@ -1065,9 +1054,7 @@ function convertScene(scene: THREE.Scene, options: FromTHREESceneOptions, store:
   const threeEnvironment = scene.environment as THREE.DataTexture | null;
   const environmentMap = convertDataTexture(threeEnvironment, textureCache);
   const environmentLight = threeEnvironment && environmentMap
-    ? retainLight(store, threeEnvironment, new EnvironmentLight({
-        map: environmentMap, rotation: eulerToMat3(scene, scene.environmentRotation)
-      })) as EnvironmentLight
+    ? retainLight(store, threeEnvironment, new EnvironmentLight({map: environmentMap})) as EnvironmentLight
     : undefined;
   if (environmentLight) lights.push(environmentLight);
 
@@ -1122,9 +1109,6 @@ function convertScene(scene: THREE.Scene, options: FromTHREESceneOptions, store:
   }
   return {
     background,
-    backgroundRotation: background && !Array.isArray(background)
-      ? eulerToMat3(scene, scene.backgroundRotation)
-      : undefined,
     meshes,
     lights
   };
@@ -1244,7 +1228,6 @@ export class THREESync extends Sync {
       if (!snapshotsEqual(this.scene.meshes, next.meshes)) this.scene.meshes = next.meshes;
       if (!snapshotsEqual(this.scene.lights, next.lights)) this.scene.lights = next.lights;
       this.scene.background = next.background;
-      this.scene.backgroundRotation = next.backgroundRotation;
       this.engine.scene = this.scene;
     }
     let cameraChanged = false;

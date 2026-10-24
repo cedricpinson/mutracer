@@ -1,5 +1,4 @@
 import { constants } from './webgl.js';
-import type { Mat3 } from '../types.js';
 import { MATERIAL_FLOAT_COUNT } from './materialLayout.js';
 import { normalizeBounces } from './pathLimits.js';
 import { MATERIAL_TEXTURE_DEFINES, materialTextureFeatures } from './materialTextureSlots.js';
@@ -170,20 +169,10 @@ export function isWebGPUPipelineSpecializationFailure(...errors: unknown[]) {
   );
 }
 
-/** Packs a column-major 3×3 rotation (identity when omitted) into a padded WGSL `mat3x3f`. */
-export function writeRotationUniform(view: Float32Array, rotation?: Mat3) {
-  for (let column = 0; column < 3; column++) {
-    for (let row = 0; row < 3; row++) {
-      view[column * 4 + row] = rotation ? rotation[column * 3 + row] : column === row ? 1 : 0;
-    }
-    view[column * 4 + 3] = 0;
-  }
-}
-
 /** CPU-side views over the `RayTraceUniform` WGSL struct. */
 export function makeRayTraceUniform() {
   // Created from https://webgpufundamentals.org/webgpu/lessons/resources/wgsl-offset-computer.html
-  const RayTraceUniformValues = new ArrayBuffer(272);
+  const RayTraceUniformValues = new ArrayBuffer(176);
   const RayTraceUniformViews = {
     outputSize: new Float32Array(RayTraceUniformValues, 0, 2),
     sampleCount: new Float32Array(RayTraceUniformValues, 8, 1),
@@ -216,18 +205,13 @@ export function makeRayTraceUniform() {
     sampleSequenceOffset: new Uint32Array(RayTraceUniformValues, 164, 1),
     // Shadow-catcher light table, relative to lightChoiceTexelOffset.
     shadowCatcherChoiceOffset: new Int32Array(RayTraceUniformValues, 168, 1),
-    shadowCatcherChoiceCount: new Int32Array(RayTraceUniformValues, 172, 1),
-    // mat3x3f: three vec3f columns, each padded to 16 bytes.
-    envRotation: new Float32Array(RayTraceUniformValues, 176, 12),
-    backgroundRotation: new Float32Array(RayTraceUniformValues, 224, 12)
+    shadowCatcherChoiceCount: new Int32Array(RayTraceUniformValues, 172, 1)
   };
   // Fixed runtime trip bounds discourage thin-film loop unrolling. Keep 4 for
   // 2 polarizations/substrates and 3 channels, independent of BSDF budgets.
   RayTraceUniformViews.loopUnrollGuard[0] = 4;
   RayTraceUniformViews.bevel[0] = 1;
   RayTraceUniformViews.dispersionWavelengths[0] = 3;
-  writeRotationUniform(RayTraceUniformViews.envRotation);
-  writeRotationUniform(RayTraceUniformViews.backgroundRotation);
   return {
     buffer: RayTraceUniformValues,
     views: RayTraceUniformViews
@@ -2021,8 +2005,7 @@ ${rayTraceCompute({
     return true;
   }
 
-  setBackground(background?: SceneBackground, rotation?: Mat3) {
-    writeRotationUniform(this._rtUniform.views.backgroundRotation, rotation);
+  setBackground(background?: SceneBackground) {
     this._constants.USE_BACKGROUND = !!background;
     const backgroundImage =
       background && !Array.isArray(background)
@@ -2741,8 +2724,6 @@ ${rayTraceCompute({
     const numAnalyticLights = analyticLights.length;
 
     const envImage = this._sceneEnvironment.update(lights);
-    const environmentLight = lights.find(light => light.type === 'EnvironmentLight');
-    writeRotationUniform(this._rtUniform.views.envRotation, environmentLight?.rotation);
 
     this._rtUniform.views.lightsCount[0] = numAnalyticLights;
 
