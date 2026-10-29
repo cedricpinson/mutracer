@@ -1,4 +1,4 @@
-import { ColorRGBA, Mat4 } from '../types.js';
+import type { ColorRGBA, Mat4 } from '../types.js';
 import AmbientLight from './AmbientLight.js';
 import DirectionalLight from './DirectionalLight.js';
 import EnvironmentLight from './EnvironmentLight.js';
@@ -13,6 +13,18 @@ import Texture from './Texture.js';
 export type AnalyticLight = RectLight | SphereLight | SpotLight | DirectionalLight;
 /** Any light that can be placed in {@link Scene.lights}. */
 export type SceneLight = AmbientLight | EnvironmentLight | AnalyticLight;
+
+/** An equirectangular camera background with independent orientation. */
+export interface EquirectBackground {
+  /** Equirectangular background discriminator; always `Equirect`. */
+  type: 'Equirect';
+  /** Required equirectangular texture. */
+  map: Texture;
+  /** Map-to-world rotation, column-major. Default identity; translation and positive axis scale are ignored. */
+  transform?: Mat4;
+  /** Nonnegative background RGB multiplier. Default `1`; lighting and alpha are unchanged. */
+  intensity?: number;
+}
 
 /**
  * Environment map projected onto a ground plane and sky dome, so objects
@@ -38,26 +50,9 @@ export interface GroundedSkyboxBackground {
 }
 
 /**
- * Equirectangular background texture with an orientation, like Three.js
- * `scene.backgroundRotation`. A plain `Texture` background is not rotated.
- */
-export interface EquirectBackground {
-  /** Rotated equirectangular discriminator; always `Equirect`. */
-  type: 'Equirect';
-  /** Required equirectangular texture. The first row is the zenith (+Y). */
-  map: Texture;
-  /**
-   * Column-major 4x4 matrix rotating the map from local to world space;
-   * translation and positive axis scale are ignored. Default identity.
-   */
-  transform?: Mat4;
-}
-
-/**
  * What camera rays that miss the scene show: a linear RGBA color (alpha 0
- * for a transparent canvas), an equirectangular texture (plain, or rotated
- * with {@link EquirectBackground}), or a grounded skybox. When omitted, the
- * environment light is shown.
+ * for a transparent canvas), an equirectangular texture, an `EquirectBackground`
+ * with independent rotation, or a grounded skybox. When omitted, the environment light is shown.
  */
 export type SceneBackground = ColorRGBA | Texture | EquirectBackground | GroundedSkyboxBackground;
 /**
