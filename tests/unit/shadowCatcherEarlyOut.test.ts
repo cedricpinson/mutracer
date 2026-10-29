@@ -1,63 +1,47 @@
-// Locks the shadow-catcher early out: shadow rays are skipped where the
-// catcher's resolved alpha is zero. Why it exists and what it saves are
-// documented once, above the gate in the integrator's SHADOW_CATCHER branch
-// (src/renderer/wgsl/rayTrace.compute.ts).
+// Locks the shadow-catcher alpha contract on both backends: the catcher's
+// resolved alpha (opacity, alphaMap) scales the shadow it shows, and shadow
+// rays are skipped where that alpha is zero. The light sample still counts in
+// the total, so the skip is bit-identical to tracing it. The rationale lives
+// above sampleShadowCatcher() in src/renderer/wgsl/chunks/sampleShadowCatcher.wgsl.ts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import rayTraceCompute from '../../src/renderer/wgsl/rayTrace.compute';
 import shadowCatcherFrag from '../../src/renderer/glsl/shadowCatcher.frag';
+import sampleShadowCatcherWgsl from '../../src/renderer/wgsl/chunks/sampleShadowCatcher.wgsl';
+import sampleShadowCatcherGlsl from '../../src/renderer/glsl/chunks/sampleShadowCatcher.glsl';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-// A catcher pixel whose resolved alpha (opacity, alphaMap) is zero has zero
-// shadow opacity whatever its visibility. Both backends must skip the shadow
-// rays there, and gate them on the same resolved value that scales the result.
-function catcherBranch(source: string, start: RegExp, end: RegExp) {
-  const from = source.search(start);
-  expect(from, 'catcher branch start').toBeGreaterThanOrEqual(0);
-  const rest = source.slice(from);
-  const to = rest.search(end);
-  expect(to, 'catcher branch end').toBeGreaterThan(0);
-  return rest.slice(0, to);
-}
-
-function expectAlphaGatedShadowRays(branch: string, guard: RegExp, use: RegExp) {
-  const resolve = branch.search(/catcherAlpha\s*=\s*clamp\(\s*(?:ma|mat)\.alpha\s*,\s*0\.0\s*,\s*1\.0\s*\)/);
-  const gate = branch.search(guard);
-  const sample = branch.search(/sampleShadowCatcher\(/);
-  const scale = branch.search(use);
-  expect(resolve).toBeGreaterThanOrEqual(0);
-  expect(gate).toBeGreaterThan(resolve);
-  expect(sample).toBeGreaterThan(gate);
-  expect(scale).toBeGreaterThan(sample);
-  // The raw material alpha is not read again after the gate.
-  expect(branch.slice(gate)).not.toMatch(/\b(?:ma|mat)\.alpha\b/);
-}
-
-describe('shadow catcher early-out at zero catcher alpha', () => {
-  it('skips the WebGPU shadow rays where the resolved alpha is zero', () => {
+describe('shadow catcher alpha and early-out', () => {
+  it('passes the resolved alpha into the WebGPU sampler, which scales and gates on it', () => {
     vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2, COMPUTE: 4 });
-    const branch = catcherBranch(
-      rayTraceCompute({ hasDisplacement: false }),
-      /if \((?:si\.hit && )?ma\.materialType == SHADOW_CATCHER\) \{/,
-      /\n {2}\}\n {2}else \{/
-    );
-    expectAlphaGatedShadowRays(
-      branch,
-      /if \(catcherAlpha <= 0\.0\) \{\s*return vec4f\(vec3f\(1\.0\), 0\.0\);/,
-      /return vec4f\(vec3f\(1\.0\), path\.alpha \* catcherAlpha\);/
-    );
+    expect(rayTraceCompute({ hasDisplacement: false }))
+      .toMatch(/sampleShadowCatcher\(si, 0, &path, clamp\(ma\.alpha, 0\.0, 1\.0\)\)/);
+    expect(sampleShadowCatcherWgsl).toMatch(/catcherAlpha: f32\) -> vec2f/);
+    expect(sampleShadowCatcherWgsl)
+      .toMatch(/let occluded = catcherAlpha > 0\.0 && intersectSceneShadow\(/);
+    expect(sampleShadowCatcherWgsl)
+      .toMatch(/counts \+= vec2f\(select\(0\.0, catcherAlpha, occluded\), 1\.0\);/);
   });
 
-  it('skips the WebGL 2 shadow rays where the resolved alpha is zero', () => {
-    const branch = catcherBranch(
-      shadowCatcherFrag.main,
-      /if \(mat\.materialType != SHADOW_CATCHER\)/,
-      /\n\}\n/
-    );
-    expectAlphaGatedShadowRays(
-      branch,
-      /if \(!path\.abort && catcherAlpha > 0\.0\) \{/,
-      /visibility = 1\.0 - \(1\.0 - path\.alpha\) \* catcherAlpha;/
-    );
+  it('passes the resolved alpha into the WebGL 2 sampler, which scales and gates on it', () => {
+    expect(shadowCatcherFrag.main)
+      .toMatch(/sampleShadowCatcher\(si, 0, path, clamp\(mat\.alpha, 0\.0, 1\.0\)\)/);
+    expect(sampleShadowCatcherGlsl).toMatch(/float catcherAlpha\) \{/);
+    expect(sampleShadowCatcherGlsl)
+      .toMatch(/bool occluded = catcherAlpha > 0\.0 && intersectSceneShadow\(/);
+    expect(sampleShadowCatcherGlsl)
+      .toMatch(/counts \+= vec2\(occluded \? catcherAlpha : 0\.0, 1\.0\);/);
+  });
+
+  it('counts every light sample that reaches the visible side, even where the alpha is zero', () => {
+    // The total must not depend on the alpha, or the ratio of sums would shift
+    // where the alpha crosses zero inside a pixel.
+    for (const source of [sampleShadowCatcherWgsl, sampleShadowCatcherGlsl]) {
+      const gate = source.indexOf('catcherAlpha > 0.0 &&');
+      const total = source.search(/, 1\.0\);\n/);
+      expect(gate).toBeGreaterThanOrEqual(0);
+      expect(total).toBeGreaterThan(gate);
+      expect(source).not.toMatch(/if \(catcherAlpha/);
+    }
   });
 });

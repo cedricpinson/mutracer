@@ -18,12 +18,11 @@ A tuning checklist. Each item links to the page with the details.
 - Use a preview Render with cheaper quality and optional adaptiveResolution:
   `{targetFrameMs: 20, minScale: .25}`, plus resolutionScale .5. Choose it during
   motion and configure final.fallback once; see [progressive rendering](./progressive-rendering.md).
-- timeBudgetMs (default 21) bounds each render's tile cost. Raise it for exports.
-- allowMultipleSamplesPerFrame adds several samples per refine when time permits.
-- targetBatchTimeMs (default 0, WebGPU) keeps an idle final render's GPU busy between
-  display frames: refine queues batches of samples up to that much work ahead, with the
-  same sample sequence. A newly selected preview waits behind at most about one budget,
-  so 30–60 ms trades throughput against the latency of the first preview frame of a drag.
+- `timeBudgetMs` (default 21) targets each render's tile cost. Raise it for exports.
+- `batchSamples` lets a still render use the whole GPU instead of one sample per
+  display frame; enable it with `RenderLoop({final: {batchSamples: true}})`. In your
+  own loop, a larger `timeBudgetMs` batches more per call but delays the first
+  preview after an edit. See [sample batching](./progressive-rendering.md#sample-batching).
 - For exports, `render.converge` with `targetBatchTimeMs` adapts batch sizes
   to the GPU; omit `previewIntervalMs` for maximum throughput.
 
